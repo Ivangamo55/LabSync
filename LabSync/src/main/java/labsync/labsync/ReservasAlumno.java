@@ -80,9 +80,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
         txtActividad.setText("");
         txtActividad.setToolTipText("Ej. practica, proyecto o exposicion");
         btnSolicitarReserva.setEnabled(false);
-        // Boton reservado para el futuro modulo de reportes de alumnos.
-        // No debe abrir la ventana administrativa ReporteFalla.
-        btnReporteFallas.setToolTipText("Modulo de reportes para alumnos pendiente");
+        btnReporteFallas.addActionListener(event -> abrirReporteFallas());
 
         tablaDisponibilidad.setModel(new DefaultTableModel(
             new Object[][]{},
@@ -344,6 +342,12 @@ public class ReservasAlumno extends javax.swing.JFrame {
         txtResumenFecha.setText("");
         txtResumenHorario.setText("");
         btnSolicitarReserva.setEnabled(false);
+    }
+
+    private void abrirReporteFallas() {
+        ReporteFallasAlumno reportes = new ReporteFallasAlumno(idUsuario, nombreUsuario);
+        reportes.setVisible(true);
+        dispose();
     }
 
     private void mostrarErrorConexion() {

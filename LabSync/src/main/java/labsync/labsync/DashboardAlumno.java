@@ -39,9 +39,7 @@ public class DashboardAlumno extends javax.swing.JFrame {
 
     private void configurarNavegacion() {
         btnMisReservas.addActionListener(evt -> abrirMisReservas());
-        // Boton reservado para el futuro modulo de reportes de alumnos.
-        // No debe abrir la ventana administrativa ReporteFalla.
-        btnReporteFallas.setToolTipText("Modulo de reportes para alumnos pendiente");
+        btnReporteFallas.addActionListener(evt -> abrirReporteFallas());
         lbVerTodasReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         lbVerTodasReservas.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
@@ -58,6 +56,12 @@ public class DashboardAlumno extends javax.swing.JFrame {
      */
     public void abrirMisReservas() {
         mostrarTodasReservas();
+    }
+
+    private void abrirReporteFallas() {
+        ReporteFallasAlumno reportes = new ReporteFallasAlumno(idUsuario, nombreUsuario);
+        reportes.setVisible(true);
+        dispose();
     }
 
     private void cargarDashboardAlumno() {
