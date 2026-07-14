@@ -24,21 +24,18 @@ import javax.swing.table.DefaultTableModel;
 public class ReservasAlumno extends javax.swing.JFrame {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(ReservasAlumno.class.getName());
+    private static final String[] LABORATORIOS = {
+        "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03"
+    };
     private String nombreUsuario;
-    private int idUsuario;
 
     public ReservasAlumno() {
-        this(0, "Usuario");
+        this("Usuario");
     }
 
     public ReservasAlumno(String nombreRecibido) {
-        this(0, nombreRecibido);
-    }
-
-    public ReservasAlumno(int idUsuario, String nombreRecibido) {
         initComponents();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
-        this.idUsuario = idUsuario;
         this.nombreUsuario = nombreRecibido == null || nombreRecibido.isBlank() ? "Usuario" : nombreRecibido;
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
         configurarDateChooser();
@@ -80,6 +77,8 @@ public class ReservasAlumno extends javax.swing.JFrame {
         txtActividad.setText("");
         txtActividad.setToolTipText("Ej. practica, proyecto o exposicion");
         btnSolicitarReserva.setEnabled(false);
+        btnReservas.addActionListener(this::btnReservasActionPerformed);
+        btnMisReservas.addActionListener(this::btnMisReservasActionPerformed);
         btnReporteFallas.addActionListener(event -> abrirReporteFallas());
 
         tablaDisponibilidad.setModel(new DefaultTableModel(
@@ -194,11 +193,9 @@ public class ReservasAlumno extends javax.swing.JFrame {
         String horario = cmbHorario.getSelectedItem().toString();
         String laboratorio = cmbLaboratorio.getSelectedIndex() > 0
             ? cmbLaboratorio.getSelectedItem().toString() : "";
-        String sql = "SELECT l.nombre, l.capacidad, "
-            + "CASE WHEN EXISTS (SELECT 1 FROM reservas r WHERE r.laboratorio = l.nombre "
-            + "AND r.fecha = ? AND r.horario = ? AND r.estado IN ('Pendiente','Aprobada')) "
-            + "THEN 'Ocupado' ELSE 'Disponible' END AS disponibilidad "
-            + "FROM laboratorios l WHERE l.activo = 1 AND (? = '' OR l.nombre = ?) ORDER BY l.nombre";
+        String[] laboratorios = laboratorio.isEmpty() ? LABORATORIOS : new String[]{laboratorio};
+        String sql = "SELECT EXISTS (SELECT 1 FROM reservas WHERE laboratorio = ? "
+            + "AND fecha = ? AND horario = ? AND estado IN ('Pendiente','Aprobada')) AS ocupado";
 
         try (Connection con = ConexionBD.conectar()) {
             if (con == null) {
@@ -206,15 +203,15 @@ public class ReservasAlumno extends javax.swing.JFrame {
                 return;
             }
             try (PreparedStatement ps = con.prepareStatement(sql)) {
-                ps.setDate(1, fecha);
-                ps.setString(2, horario);
-                ps.setString(3, laboratorio);
-                ps.setString(4, laboratorio);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        String estado = rs.getString("disponibilidad");
+                for (String laboratorioActual : laboratorios) {
+                    ps.setString(1, laboratorioActual);
+                    ps.setDate(2, fecha);
+                    ps.setString(3, horario);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        rs.next();
+                        String estado = rs.getBoolean("ocupado") ? "Ocupado" : "Disponible";
                         modelo.addRow(new Object[]{
-                            rs.getString("nombre"), horario, rs.getInt("capacidad"), estado,
+                            laboratorioActual, horario, capacidadLaboratorio(laboratorioActual), estado,
                             "Disponible".equals(estado) ? "Seleccionar" : "--"
                         });
                     }
@@ -226,6 +223,10 @@ public class ReservasAlumno extends javax.swing.JFrame {
         } catch (SQLException ex) {
             mostrarErrorSQL("No se pudo consultar la disponibilidad", ex);
         }
+    }
+
+    private int capacidadLaboratorio(String laboratorio) {
+        return laboratorio.startsWith("5-") ? 25 : 30;
     }
 
     private void seleccionarLaboratorioDisponible() {
@@ -287,22 +288,20 @@ public class ReservasAlumno extends javax.swing.JFrame {
                 }
             }
 
-            String sqlInsert = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, "
+            String sqlInsert = "INSERT INTO reservas (nombre_solicitante, rol_solicitante, "
                 + "laboratorio, actividad, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) "
-                + "VALUES (?, ?, ?, ?, ?, 'N/A', 'N/A', ?, ?, ?, 1, 'Pendiente', NULL)";
+                + "VALUES (?, ?, ?, ?, 'N/A', 'N/A', ?, ?, ?, 1, 'Pendiente', NULL)";
             try (PreparedStatement ps = con.prepareStatement(sqlInsert)) {
-                ps.setInt(1, usuario.id);
-                ps.setString(2, usuario.nombreCompleto);
-                ps.setString(3, usuario.rol);
-                ps.setString(4, laboratorio);
-                ps.setString(5, actividad);
-                ps.setString(6, usuario.turno);
-                ps.setDate(7, fecha);
-                ps.setString(8, horario);
+                ps.setString(1, usuario.nombreCompleto);
+                ps.setString(2, usuario.rol);
+                ps.setString(3, laboratorio);
+                ps.setString(4, actividad);
+                ps.setString(5, usuario.turno);
+                ps.setDate(6, fecha);
+                ps.setString(7, horario);
                 ps.executeUpdate();
             }
             con.commit();
-            this.idUsuario = usuario.id;
             JOptionPane.showMessageDialog(this, "La reserva fue enviada y quedo Pendiente de aprobacion.", "Reserva registrada", JOptionPane.INFORMATION_MESSAGE);
             txtActividad.setText("");
             buscarDisponibilidad();
@@ -316,21 +315,15 @@ public class ReservasAlumno extends javax.swing.JFrame {
     }
 
     private DatosUsuario obtenerDatosUsuario(Connection con) throws SQLException {
-        String sql = "SELECT u.id, CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) AS nombre_completo, "
+        String sql = "SELECT CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) AS nombre_completo, "
             + "u.rol, COALESCE(e.turno, 'No especificado') AS turno FROM usuario u "
-            + "LEFT JOIN estudiante e ON e.id_usuario = u.id WHERE "
-            + (idUsuario > 0 ? "u.id = ?" : "u.nombre = ? OR CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) = ?")
-            + " ORDER BY u.id LIMIT 1";
+            + "LEFT JOIN estudiante e ON e.id_usuario = u.id "
+            + "WHERE u.nombre = ? LIMIT 1";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            if (idUsuario > 0) {
-                ps.setInt(1, idUsuario);
-            } else {
-                ps.setString(1, nombreUsuario);
-                ps.setString(2, nombreUsuario);
-            }
+            ps.setString(1, nombreUsuario);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return new DatosUsuario(rs.getInt("id"), rs.getString("nombre_completo"), rs.getString("rol"), rs.getString("turno"));
+                    return new DatosUsuario(rs.getString("nombre_completo"), rs.getString("rol"), rs.getString("turno"));
                 }
             }
         }
@@ -345,7 +338,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
     }
 
     private void abrirReporteFallas() {
-        ReporteFallasAlumno reportes = new ReporteFallasAlumno(idUsuario, nombreUsuario);
+        ReporteFallasAlumno reportes = new ReporteFallasAlumno(nombreUsuario);
         reportes.setVisible(true);
         dispose();
     }
@@ -360,13 +353,11 @@ public class ReservasAlumno extends javax.swing.JFrame {
     }
 
     private static class DatosUsuario {
-        final int id;
         final String nombreCompleto;
         final String rol;
         final String turno;
 
-        DatosUsuario(int id, String nombreCompleto, String rol, String turno) {
-            this.id = id;
+        DatosUsuario(String nombreCompleto, String rol, String turno) {
             this.nombreCompleto = nombreCompleto;
             this.rol = rol;
             this.turno = turno;
@@ -431,31 +422,26 @@ public class ReservasAlumno extends javax.swing.JFrame {
         btnReservas.setBackground(new java.awt.Color(255, 255, 255));
         btnReservas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         btnReservas.setForeground(new java.awt.Color(6, 140, 115));
-        btnReservas.setText("Reservas");
+        btnReservas.setText("Reservar");
         btnReservas.setBorderPainted(false);
-        btnReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnReservas.setFocusPainted(false);
         btnReservas.setPreferredSize(new java.awt.Dimension(200, 50));
-        btnReservas.addActionListener(this::btnReservasActionPerformed);
-        sidebarVerde.add(btnReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 290, 200, -1));
+        sidebarVerde.add(btnReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 340, 200, -1));
 
         btnMisReservas.setBackground(new java.awt.Color(255, 255, 255));
         btnMisReservas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         btnMisReservas.setForeground(new java.awt.Color(6, 140, 115));
         btnMisReservas.setText("Mis reservas");
         btnMisReservas.setBorderPainted(false);
-        btnMisReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnMisReservas.setFocusPainted(false);
         btnMisReservas.setPreferredSize(new java.awt.Dimension(200, 50));
-        btnMisReservas.addActionListener(this::btnMisReservasActionPerformed);
-        sidebarVerde.add(btnMisReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 350, 200, -1));
+        sidebarVerde.add(btnMisReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 270, 200, -1));
 
         btnReporteFallas.setBackground(new java.awt.Color(255, 255, 255));
         btnReporteFallas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         btnReporteFallas.setForeground(new java.awt.Color(6, 140, 115));
         btnReporteFallas.setText("Reporte de fallas");
         btnReporteFallas.setBorderPainted(false);
-        btnReporteFallas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnReporteFallas.setFocusPainted(false);
         btnReporteFallas.setPreferredSize(new java.awt.Dimension(200, 50));
         sidebarVerde.add(btnReporteFallas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 410, 200, -1));
@@ -539,7 +525,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
         panelFormulario.add(lbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(505, 65, -1, -1));
 
         cmbLaboratorio.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio", "PB-05", "M-11", "M-12", "M-13" }));
         panelFormulario.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(505, 90, 210, 30));
 
         lbActividad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
@@ -619,7 +605,6 @@ public class ReservasAlumno extends javax.swing.JFrame {
         txtResumenLaboratorio.setEditable(false);
         txtResumenLaboratorio.setBackground(new java.awt.Color(255, 255, 255));
         txtResumenLaboratorio.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        txtResumenLaboratorio.setText("");
         txtResumenLaboratorio.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         panelResumen.add(txtResumenLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 78, 240, 26));
 
@@ -668,10 +653,10 @@ public class ReservasAlumno extends javax.swing.JFrame {
     }
 
     private void btnMisReservasActionPerformed(java.awt.event.ActionEvent evt) {
-        DashboardAlumno dashboard = new DashboardAlumno(idUsuario, nombreUsuario);
+        DashboardAlumno dashboard = new DashboardAlumno(nombreUsuario);
+        dashboard.setLocationRelativeTo(null);
         dashboard.setVisible(true);
         dispose();
-        dashboard.abrirMisReservas();
     }
 
     private void btnCerrarSesionActionPerformed(java.awt.event.ActionEvent evt) {

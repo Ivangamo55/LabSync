@@ -74,43 +74,11 @@ CREATE TABLE IF NOT EXISTS `inventario` (
   PRIMARY KEY (`id_inventario`),
   UNIQUE KEY `codigo` (`codigo`),
   UNIQUE KEY `no_serie` (`no_serie`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Volcado de datos para la tabla `inventario`
---
-
-INSERT INTO `inventario` (`id_inventario`, `codigo`, `nombre_equipo`, `tipo_dispositivo`, `marca`, `modelo`, `no_serie`, `laboratorio`, `estado`, `ultimo_mantenimiento`, `observaciones`, `fecha_registro`) VALUES
-(4, '2026A123456', 'Lenovo', 'Computadora', 'hp', '1', '25', 'M-13', 'En mantenimiento', '2026-07-08', '', '2026-07-01 19:14:39'),
-(5, '24521', 'labsync', 'Computadora', 'hp', 'lenovo', '4168', 'M-02', 'Dado de baja', NULL, '', '2026-07-07 13:34:15'),
-(6, '2219A401753', 'Lenovo', 'Computadora', 'Lenovo', '15957', '123456789', 'M-11', 'En mantenimiento', '2026-07-08', 'Es unacomputadora Only One', '2026-07-08 16:12:00');
-
--- --------------------------------------------------------
-
---
--- Catalogo de laboratorios disponible para reservaciones
---
-
-DROP TABLE IF EXISTS `laboratorios`;
-CREATE TABLE IF NOT EXISTS `laboratorios` (
-  `id_laboratorio` int NOT NULL AUTO_INCREMENT,
-  `nombre` varchar(100) NOT NULL,
-  `capacidad` int NOT NULL DEFAULT 1,
-  `activo` tinyint(1) NOT NULL DEFAULT 1,
-  PRIMARY KEY (`id_laboratorio`),
-  UNIQUE KEY `uk_laboratorios_nombre` (`nombre`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `laboratorios` (`nombre`, `capacidad`, `activo`) VALUES
-('PB-05', 30, 1),
-('M-02', 30, 1),
-('M-05', 30, 1),
-('M-11', 30, 1),
-('M-12', 30, 1),
-('M-13', 30, 1),
-('M-14', 30, 1),
-('5-03', 25, 1),
-('5-06', 25, 1);
+--
+-- El inventario se entrega sin registros de equipos.
+--
 
 -- --------------------------------------------------------
 
@@ -162,8 +130,8 @@ CREATE TABLE IF NOT EXISTS `mantenimiento` (
 --
 
 INSERT INTO `mantenimiento` (`id_mantenimiento`, `id_falla`, `codigo_equipo`, `nombre_equipo`, `laboratorio`, `tipo_mantenimiento`, `fecha_programada`, `estado`, `responsable`, `observaciones`, `fecha_registro`) VALUES
-(9, NULL, '2219A401753', 'Lenovo', 'M-11', 'Preventivo', '2026-07-13', 'Cancelado', 'Antonio', '', '2026-07-09 16:53:34'),
-(10, NULL, '2026A123456', 'Lenovo', 'M-13', 'Preventivo', '2026-07-10', 'Pendiente', 'Antonio', '', '2026-07-10 03:17:11');
+(9, NULL, NULL, 'Lenovo', 'M-11', 'Preventivo', '2026-07-13', 'Cancelado', 'Antonio', '', '2026-07-09 16:53:34'),
+(10, NULL, NULL, 'Lenovo', 'M-13', 'Preventivo', '2026-07-10', 'Pendiente', 'Antonio', '', '2026-07-10 03:17:11');
 
 -- --------------------------------------------------------
 

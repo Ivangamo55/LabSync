@@ -230,10 +230,7 @@ public class Login extends javax.swing.JFrame {
         // TODO add your handling code here:
     }//GEN-LAST:event_matriculaActionPerformed
 
-    /*
-        BOTON DE INICIO DE SESIÓN
-        AQUI IRA LA LOGICA PARA EL INICIO DE SESION YA CONECTADA CON LA BD
-    */
+
     private void btnLoginActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnLoginActionPerformed
         String correo = matricula.getText().trim();
         String passwordStr = this.password.getText().trim();
@@ -253,7 +250,7 @@ public class Login extends javax.swing.JFrame {
         
         if (con != null) {
             try {
-                String sql = "SELECT id, nombre, rol FROM usuario WHERE correo = ? AND password = ?";
+                String sql = "SELECT nombre, rol FROM usuario WHERE correo = ? AND password = ?";
                 java.sql.PreparedStatement ps = con.prepareStatement(sql);
 
                 ps.setString(1, correo);
@@ -262,7 +259,6 @@ public class Login extends javax.swing.JFrame {
                 java.sql.ResultSet rs = ps.executeQuery();
 
                 if (rs.next()) {
-                    int idUsuario = rs.getInt("id");
                     String strNombre = rs.getString("nombre");
                     String rolUsuario = rs.getString("rol").trim();
                     
@@ -275,7 +271,7 @@ public class Login extends javax.swing.JFrame {
                     
                     switch (rolUsuario) {
                         case "Estudiante":
-                            DashboardAlumno ventanaAlumno = new DashboardAlumno(idUsuario, strNombre);
+                            DashboardAlumno ventanaAlumno = new DashboardAlumno(strNombre);
                             ventanaAlumno.setLocationRelativeTo(null);
                             ventanaAlumno.setVisible(true);
                             this.dispose();
@@ -344,7 +340,6 @@ public class Login extends javax.swing.JFrame {
         }
     }//GEN-LAST:event_btnLoginActionPerformed
 
-    // BOTON DE INICIAR SESIÓN -> REGISTO 
     private void btnRegisterActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRegisterActionPerformed
         Register ventanaRegister = new Register();
         

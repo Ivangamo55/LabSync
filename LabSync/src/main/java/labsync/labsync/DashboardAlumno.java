@@ -8,20 +8,15 @@ package labsync.labsync;
 public class DashboardAlumno extends javax.swing.JFrame {
 
     private String nombreUsuario;
-    private int idUsuario;
 
     public DashboardAlumno() {
-        this(0, "Usuario");
+        this("Usuario");
     }
 
     public DashboardAlumno(String nombreRecibido) {
-        this(0, nombreRecibido);
-    }
-
-    public DashboardAlumno(int idUsuario, String nombreRecibido) {
-        this.idUsuario = idUsuario;
-        this.nombreUsuario = nombreRecibido;
+        this.nombreUsuario = nombreRecibido == null || nombreRecibido.isBlank() ? "Usuario" : nombreRecibido;
         initComponents();
+        setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
         configurarNavegacion();
         cargarDashboardAlumno();
@@ -38,6 +33,7 @@ public class DashboardAlumno extends javax.swing.JFrame {
     }
 
     private void configurarNavegacion() {
+        btnReservas.addActionListener(evt -> abrirReservas());
         btnMisReservas.addActionListener(evt -> abrirMisReservas());
         btnReporteFallas.addActionListener(evt -> abrirReporteFallas());
         lbVerTodasReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
@@ -58,8 +54,14 @@ public class DashboardAlumno extends javax.swing.JFrame {
         mostrarTodasReservas();
     }
 
+    private void abrirReservas() {
+        ReservasAlumno reservas = new ReservasAlumno(nombreUsuario);
+        reservas.setVisible(true);
+        dispose();
+    }
+
     private void abrirReporteFallas() {
-        ReporteFallasAlumno reportes = new ReporteFallasAlumno(idUsuario, nombreUsuario);
+        ReporteFallasAlumno reportes = new ReporteFallasAlumno(nombreUsuario);
         reportes.setVisible(true);
         dispose();
     }
@@ -74,7 +76,7 @@ public class DashboardAlumno extends javax.swing.JFrame {
             return;
         }
 
-        String filtro = "(id_usuario = ? OR (? = 0 AND nombre_solicitante = ?))";
+        String filtro = "SUBSTRING_INDEX(TRIM(nombre_solicitante), ' ', 1) = ?";
         try (con) {
             String sqlResumen = "SELECT SUM(CASE WHEN estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE() THEN 1 ELSE 0 END) activas, "
                 + "MIN(CASE WHEN estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE() THEN fecha END) proxima "
@@ -102,7 +104,8 @@ public class DashboardAlumno extends javax.swing.JFrame {
                 }
             }
 
-            String sqlReportes = "SELECT COUNT(*) total FROM reporte_fallas WHERE id_usuario = ? OR (? = 0 AND reportado_por = ?)";
+            String sqlReportes = "SELECT COUNT(*) total FROM reporte_fallas "
+                + "WHERE SUBSTRING_INDEX(TRIM(reportado_por), ' ', 1) = ?";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlReportes)) {
                 asignarUsuario(ps);
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
@@ -118,9 +121,7 @@ public class DashboardAlumno extends javax.swing.JFrame {
     }
 
     private void asignarUsuario(java.sql.PreparedStatement ps) throws java.sql.SQLException {
-        ps.setInt(1, idUsuario);
-        ps.setInt(2, idUsuario);
-        ps.setString(3, nombreUsuario);
+        ps.setString(1, nombreUsuario);
     }
 
     private void mostrarTodasReservas() {
@@ -133,7 +134,8 @@ public class DashboardAlumno extends javax.swing.JFrame {
             }
         };
         String sql = "SELECT fecha, horario, laboratorio, actividad, estado FROM reservas "
-            + "WHERE (id_usuario = ? OR (? = 0 AND nombre_solicitante = ?)) ORDER BY fecha DESC, horario";
+            + "WHERE SUBSTRING_INDEX(TRIM(nombre_solicitante), ' ', 1) = ? "
+            + "ORDER BY fecha DESC, horario";
         try (java.sql.Connection con = ConexionBD.conectar()) {
             if (con == null) {
                 javax.swing.JOptionPane.showMessageDialog(this, "No fue posible conectarse con la base de datos.", "Error de conexion", javax.swing.JOptionPane.ERROR_MESSAGE);
@@ -216,33 +218,29 @@ public class DashboardAlumno extends javax.swing.JFrame {
         btnReservas.setBackground(new java.awt.Color(255, 255, 255));
         btnReservas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         btnReservas.setForeground(new java.awt.Color(6, 140, 115));
-        btnReservas.setText("Reservas");
+        btnReservas.setText("Reservar");
         btnReservas.setBorderPainted(false);
-        btnReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.DEFAULT_CURSOR));
         btnReservas.setFocusPainted(false);
         btnReservas.setPreferredSize(new java.awt.Dimension(200, 50));
-        btnReservas.addActionListener(this::btnReservasActionPerformed);
-        sidebarVerde.add(btnReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 290, 200, 50));
+        sidebarVerde.add(btnReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 340, 200, -1));
 
         btnMisReservas.setBackground(new java.awt.Color(255, 255, 255));
         btnMisReservas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         btnMisReservas.setForeground(new java.awt.Color(6, 140, 115));
         btnMisReservas.setText("Mis reservas");
         btnMisReservas.setBorderPainted(false);
-        btnMisReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.DEFAULT_CURSOR));
         btnMisReservas.setFocusPainted(false);
         btnMisReservas.setPreferredSize(new java.awt.Dimension(200, 50));
-        sidebarVerde.add(btnMisReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 350, 200, 50));
+        sidebarVerde.add(btnMisReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 270, 200, -1));
 
         btnReporteFallas.setBackground(new java.awt.Color(255, 255, 255));
         btnReporteFallas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         btnReporteFallas.setForeground(new java.awt.Color(6, 140, 115));
         btnReporteFallas.setText("Reporte de fallas");
         btnReporteFallas.setBorderPainted(false);
-        btnReporteFallas.setCursor(new java.awt.Cursor(java.awt.Cursor.DEFAULT_CURSOR));
         btnReporteFallas.setFocusPainted(false);
         btnReporteFallas.setPreferredSize(new java.awt.Dimension(200, 50));
-        sidebarVerde.add(btnReporteFallas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 410, 200, 50));
+        sidebarVerde.add(btnReporteFallas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 410, 200, -1));
 
         headerBlanco.setBackground(new java.awt.Color(255, 255, 255));
         headerBlanco.setPreferredSize(new java.awt.Dimension(1030, 100));
@@ -473,13 +471,6 @@ public class DashboardAlumno extends javax.swing.JFrame {
             this.dispose();
         }
     }//GEN-LAST:event_btnCerrarSesionActionPerformed
-
-    private void btnReservasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReservasActionPerformed
-        ReservasAlumno ventanaReservasAlumno = new ReservasAlumno(idUsuario, nombreUsuario);
-        ventanaReservasAlumno.setVisible(true);
-        ventanaReservasAlumno.setLocationRelativeTo(null);
-        this.dispose();
-    }//GEN-LAST:event_btnReservasActionPerformed
 
     public static void main(String args[]) {
         try {
