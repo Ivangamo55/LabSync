@@ -1,0 +1,682 @@
+package labsync.labsync;
+
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Font;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.text.SimpleDateFormat;
+import javax.swing.BorderFactory;
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
+
+/**
+ * Diseño de la interfaz ReservasAlumno.
+ * JFrame Form editable desde NetBeans Swing Designer.
+ * Mantiene la maquetación visual del proyecto LabSync.
+ */
+public class ReservasAlumno extends javax.swing.JFrame {
+
+    private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(ReservasAlumno.class.getName());
+    private String nombreUsuario;
+    private int idUsuario;
+
+    public ReservasAlumno() {
+        this(0, "Usuario");
+    }
+
+    public ReservasAlumno(String nombreRecibido) {
+        this(0, nombreRecibido);
+    }
+
+    public ReservasAlumno(int idUsuario, String nombreRecibido) {
+        initComponents();
+        setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
+        this.idUsuario = idUsuario;
+        this.nombreUsuario = nombreRecibido == null || nombreRecibido.isBlank() ? "Usuario" : nombreRecibido;
+        lbNombreUsuario.setText("Hola, " + nombreUsuario);
+        configurarDateChooser();
+        configurarFormulario();
+        setLocationRelativeTo(null);
+    }
+
+    private void configurarDateChooser() {
+        dateFechaReserva.setDateFormatString("yyyy-MM-dd");
+        dateFechaReserva.setBackground(Color.WHITE);
+        dateFechaReserva.setForeground(new Color(51, 51, 51));
+        dateFechaReserva.setFont(new Font("Arial", Font.PLAIN, 12));
+        dateFechaReserva.setBorder(BorderFactory.createLineBorder(new Color(102, 102, 102)));
+
+        Component editor = dateFechaReserva.getDateEditor().getUiComponent();
+        editor.setBackground(Color.WHITE);
+        editor.setForeground(new Color(51, 51, 51));
+        editor.setFont(new Font("Arial", Font.PLAIN, 12));
+
+        if (editor instanceof javax.swing.JTextField) {
+            javax.swing.JTextField campoTexto = (javax.swing.JTextField) editor;
+            campoTexto.setBackground(Color.WHITE);
+            campoTexto.setForeground(new Color(51, 51, 51));
+            campoTexto.setCaretColor(new Color(51, 51, 51));
+            campoTexto.setBorder(null);
+        }
+
+        dateFechaReserva.getCalendarButton().setBackground(Color.WHITE);
+        dateFechaReserva.getCalendarButton().setForeground(new Color(51, 51, 51));
+    }
+
+    private void configurarFormulario() {
+        dateFechaReserva.setMinSelectableDate(Date.valueOf(LocalDate.now()));
+        dateFechaReserva.setDate(Date.valueOf(LocalDate.now()));
+        txtResumenLaboratorio.setText("");
+        txtResumenFecha.setText("");
+        txtResumenHorario.setText("");
+        txtActividad.setText("");
+        txtActividad.setToolTipText("Ej. practica, proyecto o exposicion");
+        btnSolicitarReserva.setEnabled(false);
+        // Boton reservado para el futuro modulo de reportes de alumnos.
+        // No debe abrir la ventana administrativa ReporteFalla.
+        btnReporteFallas.setToolTipText("Modulo de reportes para alumnos pendiente");
+
+        tablaDisponibilidad.setModel(new DefaultTableModel(
+            new Object[][]{},
+            new String[]{"Laboratorio", "Horario", "Capacidad", "Estado", "Accion"}
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        });
+        tablaDisponibilidad.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                seleccionarLaboratorioDisponible();
+            }
+        });
+        cmbHorario.addActionListener(event -> limpiarResumen());
+        cmbLaboratorio.addActionListener(event -> limpiarResumen());
+        dateFechaReserva.addPropertyChangeListener("date", event -> limpiarResumen());
+    }
+
+    private boolean validarBusqueda() {
+        if (dateFechaReserva.getDate() == null) {
+            JOptionPane.showMessageDialog(this, "Selecciona una fecha.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        LocalDate fecha = new Date(dateFechaReserva.getDate().getTime()).toLocalDate();
+        if (fecha.isBefore(LocalDate.now())) {
+            JOptionPane.showMessageDialog(this, "La fecha de la reserva no puede estar en el pasado.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        if (cmbHorario.getSelectedIndex() <= 0) {
+            JOptionPane.showMessageDialog(this, "Selecciona un horario.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        return true;
+    }
+
+    private void buscarDisponibilidad() {
+        if (!validarBusqueda()) {
+            return;
+        }
+
+        DefaultTableModel modelo = (DefaultTableModel) tablaDisponibilidad.getModel();
+        modelo.setRowCount(0);
+        limpiarResumen();
+
+        Date fecha = new Date(dateFechaReserva.getDate().getTime());
+        String horario = cmbHorario.getSelectedItem().toString();
+        String laboratorio = cmbLaboratorio.getSelectedIndex() > 0
+            ? cmbLaboratorio.getSelectedItem().toString() : "";
+        String sql = "SELECT l.nombre, l.capacidad, "
+            + "CASE WHEN EXISTS (SELECT 1 FROM reservas r WHERE r.laboratorio = l.nombre "
+            + "AND r.fecha = ? AND r.horario = ? AND r.estado IN ('Pendiente','Aprobada')) "
+            + "THEN 'Ocupado' ELSE 'Disponible' END AS disponibilidad "
+            + "FROM laboratorios l WHERE l.activo = 1 AND (? = '' OR l.nombre = ?) ORDER BY l.nombre";
+
+        try (Connection con = ConexionBD.conectar()) {
+            if (con == null) {
+                mostrarErrorConexion();
+                return;
+            }
+            try (PreparedStatement ps = con.prepareStatement(sql)) {
+                ps.setDate(1, fecha);
+                ps.setString(2, horario);
+                ps.setString(3, laboratorio);
+                ps.setString(4, laboratorio);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String estado = rs.getString("disponibilidad");
+                        modelo.addRow(new Object[]{
+                            rs.getString("nombre"), horario, rs.getInt("capacidad"), estado,
+                            "Disponible".equals(estado) ? "Seleccionar" : "--"
+                        });
+                    }
+                }
+            }
+            if (modelo.getRowCount() == 0) {
+                JOptionPane.showMessageDialog(this, "No se encontraron laboratorios con ese filtro.", "Sin resultados", JOptionPane.INFORMATION_MESSAGE);
+            }
+        } catch (SQLException ex) {
+            mostrarErrorSQL("No se pudo consultar la disponibilidad", ex);
+        }
+    }
+
+    private void seleccionarLaboratorioDisponible() {
+        int fila = tablaDisponibilidad.getSelectedRow();
+        if (fila < 0) {
+            return;
+        }
+        int modeloFila = tablaDisponibilidad.convertRowIndexToModel(fila);
+        if (!"Disponible".equals(tablaDisponibilidad.getModel().getValueAt(modeloFila, 3))) {
+            limpiarResumen();
+            return;
+        }
+        txtResumenLaboratorio.setText(tablaDisponibilidad.getModel().getValueAt(modeloFila, 0).toString());
+        txtResumenHorario.setText(tablaDisponibilidad.getModel().getValueAt(modeloFila, 1).toString());
+        txtResumenFecha.setText(new SimpleDateFormat("yyyy-MM-dd").format(dateFechaReserva.getDate()));
+        btnSolicitarReserva.setEnabled(true);
+    }
+
+    private void solicitarReserva() {
+        String actividad = txtActividad.getText().trim();
+        if (txtResumenLaboratorio.getText().isBlank()) {
+            JOptionPane.showMessageDialog(this, "Selecciona un laboratorio disponible de la tabla.", "Seleccion requerida", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (actividad.isBlank()) {
+            JOptionPane.showMessageDialog(this, "Escribe la actividad o motivo de la reserva.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Connection con = ConexionBD.conectar();
+        if (con == null) {
+            mostrarErrorConexion();
+            return;
+        }
+
+        try (con) {
+            con.setAutoCommit(false);
+            DatosUsuario usuario = obtenerDatosUsuario(con);
+            if (usuario == null) {
+                throw new SQLException("No se encontro el usuario que inicio sesion.");
+            }
+
+            String laboratorio = txtResumenLaboratorio.getText();
+            String horario = txtResumenHorario.getText();
+            Date fecha = Date.valueOf(txtResumenFecha.getText());
+            String sqlOcupada = "SELECT id_reserva FROM reservas WHERE laboratorio = ? AND fecha = ? "
+                + "AND horario = ? AND estado IN ('Pendiente','Aprobada') LIMIT 1 FOR UPDATE";
+            try (PreparedStatement ps = con.prepareStatement(sqlOcupada)) {
+                ps.setString(1, laboratorio);
+                ps.setDate(2, fecha);
+                ps.setString(3, horario);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        con.rollback();
+                        JOptionPane.showMessageDialog(this, "El laboratorio acaba de ser ocupado. Actualiza la disponibilidad.", "Horario no disponible", JOptionPane.WARNING_MESSAGE);
+                        buscarDisponibilidad();
+                        return;
+                    }
+                }
+            }
+
+            String sqlInsert = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, "
+                + "laboratorio, actividad, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) "
+                + "VALUES (?, ?, ?, ?, ?, 'N/A', 'N/A', ?, ?, ?, 1, 'Pendiente', NULL)";
+            try (PreparedStatement ps = con.prepareStatement(sqlInsert)) {
+                ps.setInt(1, usuario.id);
+                ps.setString(2, usuario.nombreCompleto);
+                ps.setString(3, usuario.rol);
+                ps.setString(4, laboratorio);
+                ps.setString(5, actividad);
+                ps.setString(6, usuario.turno);
+                ps.setDate(7, fecha);
+                ps.setString(8, horario);
+                ps.executeUpdate();
+            }
+            con.commit();
+            this.idUsuario = usuario.id;
+            JOptionPane.showMessageDialog(this, "La reserva fue enviada y quedo Pendiente de aprobacion.", "Reserva registrada", JOptionPane.INFORMATION_MESSAGE);
+            txtActividad.setText("");
+            buscarDisponibilidad();
+        } catch (SQLException ex) {
+            try {
+                con.rollback();
+            } catch (SQLException ignored) {
+            }
+            mostrarErrorSQL("No se pudo registrar la reserva", ex);
+        }
+    }
+
+    private DatosUsuario obtenerDatosUsuario(Connection con) throws SQLException {
+        String sql = "SELECT u.id, CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) AS nombre_completo, "
+            + "u.rol, COALESCE(e.turno, 'No especificado') AS turno FROM usuario u "
+            + "LEFT JOIN estudiante e ON e.id_usuario = u.id WHERE "
+            + (idUsuario > 0 ? "u.id = ?" : "u.nombre = ? OR CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) = ?")
+            + " ORDER BY u.id LIMIT 1";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            if (idUsuario > 0) {
+                ps.setInt(1, idUsuario);
+            } else {
+                ps.setString(1, nombreUsuario);
+                ps.setString(2, nombreUsuario);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new DatosUsuario(rs.getInt("id"), rs.getString("nombre_completo"), rs.getString("rol"), rs.getString("turno"));
+                }
+            }
+        }
+        return null;
+    }
+
+    private void limpiarResumen() {
+        txtResumenLaboratorio.setText("");
+        txtResumenFecha.setText("");
+        txtResumenHorario.setText("");
+        btnSolicitarReserva.setEnabled(false);
+    }
+
+    private void mostrarErrorConexion() {
+        JOptionPane.showMessageDialog(this, "No fue posible conectarse con la base de datos.", "Error de conexion", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void mostrarErrorSQL(String mensaje, SQLException ex) {
+        logger.log(java.util.logging.Level.SEVERE, mensaje, ex);
+        JOptionPane.showMessageDialog(this, mensaje + ":\n" + ex.getMessage(), "Error SQL", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private static class DatosUsuario {
+        final int id;
+        final String nombreCompleto;
+        final String rol;
+        final String turno;
+
+        DatosUsuario(int id, String nombreCompleto, String rol, String turno) {
+            this.id = id;
+            this.nombreCompleto = nombreCompleto;
+            this.rol = rol;
+            this.turno = turno;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
+    private void initComponents() {
+
+        sidebarVerde = new javax.swing.JPanel();
+        imgLabSync = new javax.swing.JLabel();
+        btnReservas = new javax.swing.JButton();
+        btnMisReservas = new javax.swing.JButton();
+        btnReporteFallas = new javax.swing.JButton();
+        headerBlanco = new javax.swing.JPanel();
+        imgUTJ = new javax.swing.JLabel();
+        lbNombreUsuario = new javax.swing.JLabel();
+        btnCerrarSesion = new javax.swing.JButton();
+        panelContenedor = new javax.swing.JPanel();
+        lbTituloPantalla = new javax.swing.JLabel();
+        lbSubtituloPantalla = new javax.swing.JLabel();
+        panelFormulario = new javax.swing.JPanel();
+        lbTituloFormulario = new javax.swing.JLabel();
+        lbFecha = new javax.swing.JLabel();
+        dateFechaReserva = new com.toedter.calendar.JDateChooser();
+        lbHorario = new javax.swing.JLabel();
+        cmbHorario = new javax.swing.JComboBox();
+        lbLaboratorio = new javax.swing.JLabel();
+        cmbLaboratorio = new javax.swing.JComboBox();
+        lbActividad = new javax.swing.JLabel();
+        txtActividad = new javax.swing.JTextField();
+        btnBuscarDisponibilidad = new javax.swing.JButton();
+        panelResultados = new javax.swing.JPanel();
+        lbTituloResultados = new javax.swing.JLabel();
+        jScrollPaneTabla = new javax.swing.JScrollPane();
+        tablaDisponibilidad = new javax.swing.JTable();
+        panelResumen = new javax.swing.JPanel();
+        lbTituloResumen = new javax.swing.JLabel();
+        lbResumenLaboratorio = new javax.swing.JLabel();
+        txtResumenLaboratorio = new javax.swing.JTextField();
+        lbResumenFecha = new javax.swing.JLabel();
+        txtResumenFecha = new javax.swing.JTextField();
+        lbResumenHorario = new javax.swing.JLabel();
+        txtResumenHorario = new javax.swing.JTextField();
+        btnSolicitarReserva = new javax.swing.JButton();
+
+        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        setTitle("Reservas Alumno");
+        setResizable(false);
+        getContentPane().setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        sidebarVerde.setBackground(new java.awt.Color(8, 173, 141));
+        sidebarVerde.setForeground(new java.awt.Color(255, 255, 255));
+        sidebarVerde.setPreferredSize(new java.awt.Dimension(250, 720));
+        sidebarVerde.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        imgLabSync.setIcon(new javax.swing.ImageIcon(getClass().getResource("/images/labsync_blanco_200.png"))); // NOI18N
+        imgLabSync.setText("jLabel1");
+        sidebarVerde.add(imgLabSync, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 24, 197, -1));
+
+        btnReservas.setBackground(new java.awt.Color(255, 255, 255));
+        btnReservas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        btnReservas.setForeground(new java.awt.Color(6, 140, 115));
+        btnReservas.setText("Reservas");
+        btnReservas.setBorderPainted(false);
+        btnReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        btnReservas.setFocusPainted(false);
+        btnReservas.setPreferredSize(new java.awt.Dimension(200, 50));
+        btnReservas.addActionListener(this::btnReservasActionPerformed);
+        sidebarVerde.add(btnReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 290, 200, -1));
+
+        btnMisReservas.setBackground(new java.awt.Color(255, 255, 255));
+        btnMisReservas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        btnMisReservas.setForeground(new java.awt.Color(6, 140, 115));
+        btnMisReservas.setText("Mis reservas");
+        btnMisReservas.setBorderPainted(false);
+        btnMisReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        btnMisReservas.setFocusPainted(false);
+        btnMisReservas.setPreferredSize(new java.awt.Dimension(200, 50));
+        btnMisReservas.addActionListener(this::btnMisReservasActionPerformed);
+        sidebarVerde.add(btnMisReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 350, 200, -1));
+
+        btnReporteFallas.setBackground(new java.awt.Color(255, 255, 255));
+        btnReporteFallas.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        btnReporteFallas.setForeground(new java.awt.Color(6, 140, 115));
+        btnReporteFallas.setText("Reporte de fallas");
+        btnReporteFallas.setBorderPainted(false);
+        btnReporteFallas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        btnReporteFallas.setFocusPainted(false);
+        btnReporteFallas.setPreferredSize(new java.awt.Dimension(200, 50));
+        sidebarVerde.add(btnReporteFallas, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 410, 200, -1));
+
+        getContentPane().add(sidebarVerde, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 250, 731));
+
+        headerBlanco.setBackground(new java.awt.Color(255, 255, 255));
+        headerBlanco.setPreferredSize(new java.awt.Dimension(1030, 100));
+        headerBlanco.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        imgUTJ.setIcon(new javax.swing.ImageIcon(getClass().getResource("/images/UTJ_color.png"))); // NOI18N
+        headerBlanco.add(imgUTJ, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 25, -1, -1));
+
+        lbNombreUsuario.setFont(new java.awt.Font("Arial", 1, 16)); // NOI18N
+        lbNombreUsuario.setForeground(new java.awt.Color(8, 173, 141));
+        lbNombreUsuario.setHorizontalAlignment(javax.swing.SwingConstants.RIGHT);
+        lbNombreUsuario.setText("Hola, Usuario");
+        headerBlanco.add(lbNombreUsuario, new org.netbeans.lib.awtextra.AbsoluteConstraints(650, 40, 200, 36));
+
+        btnCerrarSesion.setBackground(new java.awt.Color(220, 53, 69));
+        btnCerrarSesion.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        btnCerrarSesion.setForeground(new java.awt.Color(255, 255, 255));
+        btnCerrarSesion.setText("Cerrar Sesión");
+        btnCerrarSesion.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(204, 204, 204)));
+        btnCerrarSesion.setBorderPainted(false);
+        btnCerrarSesion.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        btnCerrarSesion.setFocusPainted(false);
+        btnCerrarSesion.setPreferredSize(new java.awt.Dimension(130, 36));
+        btnCerrarSesion.addActionListener(this::btnCerrarSesionActionPerformed);
+        headerBlanco.add(btnCerrarSesion, new org.netbeans.lib.awtextra.AbsoluteConstraints(870, 40, -1, -1));
+
+        getContentPane().add(headerBlanco, new org.netbeans.lib.awtextra.AbsoluteConstraints(256, 0, 1030, 100));
+
+        panelContenedor.setBackground(new java.awt.Color(245, 245, 245));
+        panelContenedor.setPreferredSize(new java.awt.Dimension(1030, 625));
+        panelContenedor.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        lbTituloPantalla.setFont(new java.awt.Font("Arial", 1, 24)); // NOI18N
+        lbTituloPantalla.setForeground(new java.awt.Color(102, 102, 102));
+        lbTituloPantalla.setText("Solicitar reservación");
+        panelContenedor.add(lbTituloPantalla, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 25, -1, -1));
+
+        lbSubtituloPantalla.setFont(new java.awt.Font("Arial", 0, 14)); // NOI18N
+        lbSubtituloPantalla.setForeground(new java.awt.Color(102, 102, 102));
+        lbSubtituloPantalla.setText("Consulta disponibilidad y solicita un laboratorio para tus actividades académicas.");
+        panelContenedor.add(lbSubtituloPantalla, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 58, -1, -1));
+
+        panelFormulario.setBackground(new java.awt.Color(255, 255, 255));
+        panelFormulario.setPreferredSize(new java.awt.Dimension(960, 220));
+        panelFormulario.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        lbTituloFormulario.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
+        lbTituloFormulario.setForeground(new java.awt.Color(102, 102, 102));
+        lbTituloFormulario.setText("Datos de la solicitud");
+        panelFormulario.add(lbTituloFormulario, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 18, -1, -1));
+
+        lbFecha.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        lbFecha.setForeground(new java.awt.Color(102, 102, 102));
+        lbFecha.setText("Fecha");
+        panelFormulario.add(lbFecha, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 65, -1, -1));
+
+        dateFechaReserva.setBackground(new java.awt.Color(255, 255, 255));
+        dateFechaReserva.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
+        dateFechaReserva.setForeground(new java.awt.Color(51, 51, 51));
+        dateFechaReserva.setDateFormatString("yyyy-MM-dd");
+        dateFechaReserva.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        panelFormulario.add(dateFechaReserva, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 90, 210, 30));
+
+        lbHorario.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        lbHorario.setForeground(new java.awt.Color(102, 102, 102));
+        lbHorario.setText("Horario");
+        panelFormulario.add(lbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(265, 65, -1, -1));
+
+        cmbHorario.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        cmbHorario.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona horario", "07:00 - 09:00", "09:00 - 11:00", "11:00 - 13:00", "13:00 - 15:00", "15:00 - 17:00" }));
+        panelFormulario.add(cmbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(265, 90, 210, 30));
+
+        lbLaboratorio.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        lbLaboratorio.setForeground(new java.awt.Color(102, 102, 102));
+        lbLaboratorio.setText("Laboratorio");
+        panelFormulario.add(lbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(505, 65, -1, -1));
+
+        cmbLaboratorio.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        panelFormulario.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(505, 90, 210, 30));
+
+        lbActividad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        lbActividad.setForeground(new java.awt.Color(102, 102, 102));
+        lbActividad.setText("Actividad / motivo");
+        panelFormulario.add(lbActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 140, -1, -1));
+
+        txtActividad.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        txtActividad.setForeground(new java.awt.Color(51, 51, 51));
+        txtActividad.setText("Ej. práctica, proyecto, exposición...");
+        txtActividad.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
+        panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 165, 690, 30));
+
+        btnBuscarDisponibilidad.setBackground(new java.awt.Color(8, 173, 141));
+        btnBuscarDisponibilidad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        btnBuscarDisponibilidad.setForeground(new java.awt.Color(255, 255, 255));
+        btnBuscarDisponibilidad.setText("Buscar disponibilidad");
+        btnBuscarDisponibilidad.setBorderPainted(false);
+        btnBuscarDisponibilidad.setFocusPainted(false);
+        btnBuscarDisponibilidad.addActionListener(this::btnBuscarDisponibilidadActionPerformed);
+        panelFormulario.add(btnBuscarDisponibilidad, new org.netbeans.lib.awtextra.AbsoluteConstraints(745, 165, 190, 30));
+
+        panelContenedor.add(panelFormulario, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 95, 960, 220));
+
+        panelResultados.setBackground(new java.awt.Color(255, 255, 255));
+        panelResultados.setPreferredSize(new java.awt.Dimension(625, 255));
+        panelResultados.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        lbTituloResultados.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
+        lbTituloResultados.setForeground(new java.awt.Color(102, 102, 102));
+        lbTituloResultados.setText("Laboratorios disponibles");
+        panelResultados.add(lbTituloResultados, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 18, -1, -1));
+
+        tablaDisponibilidad.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        tablaDisponibilidad.setModel(new javax.swing.table.DefaultTableModel(
+            new Object [][] {
+                {null, null, null, null, null},
+                {null, null, null, null, null},
+                {null, null, null, null, null},
+                {null, null, null, null, null}
+            },
+            new String [] {
+                "Laboratorio", "Horario", "Capacidad", "Estado", "Acción"
+            }
+        ) {
+            boolean[] canEdit = new boolean [] {
+                false, false, false, false, false
+            };
+
+            public boolean isCellEditable(int rowIndex, int columnIndex) {
+                return canEdit [columnIndex];
+            }
+        });
+        tablaDisponibilidad.setRowHeight(34);
+        tablaDisponibilidad.setSelectionBackground(new java.awt.Color(224, 247, 241));
+        tablaDisponibilidad.setShowVerticalLines(false);
+        jScrollPaneTabla.setViewportView(tablaDisponibilidad);
+
+        panelResultados.add(jScrollPaneTabla, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 55, 595, 180));
+
+        panelContenedor.add(panelResultados, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 330, 645, 255));
+
+        panelResumen.setBackground(new java.awt.Color(255, 255, 255));
+        panelResumen.setPreferredSize(new java.awt.Dimension(290, 255));
+        panelResumen.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        lbTituloResumen.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
+        lbTituloResumen.setForeground(new java.awt.Color(102, 102, 102));
+        lbTituloResumen.setText("Resumen");
+        panelResumen.add(lbTituloResumen, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 18, -1, -1));
+
+        lbResumenLaboratorio.setFont(new java.awt.Font("Arial", 1, 12)); // NOI18N
+        lbResumenLaboratorio.setForeground(new java.awt.Color(102, 102, 102));
+        lbResumenLaboratorio.setText("Laboratorio");
+        panelResumen.add(lbResumenLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 58, -1, -1));
+
+        txtResumenLaboratorio.setEditable(false);
+        txtResumenLaboratorio.setBackground(new java.awt.Color(255, 255, 255));
+        txtResumenLaboratorio.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        txtResumenLaboratorio.setText("");
+        txtResumenLaboratorio.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
+        panelResumen.add(txtResumenLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 78, 240, 26));
+
+        lbResumenFecha.setFont(new java.awt.Font("Arial", 1, 12)); // NOI18N
+        lbResumenFecha.setForeground(new java.awt.Color(102, 102, 102));
+        lbResumenFecha.setText("Fecha");
+        panelResumen.add(lbResumenFecha, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 112, -1, -1));
+
+        txtResumenFecha.setEditable(false);
+        txtResumenFecha.setBackground(new java.awt.Color(255, 255, 255));
+        txtResumenFecha.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        txtResumenFecha.setText("2026-07-15");
+        txtResumenFecha.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
+        panelResumen.add(txtResumenFecha, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 132, 240, 26));
+
+        lbResumenHorario.setFont(new java.awt.Font("Arial", 1, 12)); // NOI18N
+        lbResumenHorario.setForeground(new java.awt.Color(102, 102, 102));
+        lbResumenHorario.setText("Horario");
+        panelResumen.add(lbResumenHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 166, -1, -1));
+
+        txtResumenHorario.setEditable(false);
+        txtResumenHorario.setBackground(new java.awt.Color(255, 255, 255));
+        txtResumenHorario.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        txtResumenHorario.setText("11:00 - 13:00");
+        txtResumenHorario.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
+        panelResumen.add(txtResumenHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 186, 240, 26));
+
+        btnSolicitarReserva.setBackground(new java.awt.Color(8, 173, 141));
+        btnSolicitarReserva.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
+        btnSolicitarReserva.setForeground(new java.awt.Color(255, 255, 255));
+        btnSolicitarReserva.setText("Solicitar reserva");
+        btnSolicitarReserva.setBorderPainted(false);
+        btnSolicitarReserva.setFocusPainted(false);
+        btnSolicitarReserva.addActionListener(this::btnSolicitarReservaActionPerformed);
+        panelResumen.add(btnSolicitarReserva, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 225, 240, 35));
+
+        panelContenedor.add(panelResumen, new org.netbeans.lib.awtextra.AbsoluteConstraints(720, 330, 285, 285));
+
+        getContentPane().add(panelContenedor, new org.netbeans.lib.awtextra.AbsoluteConstraints(256, 106, 1030, 625));
+
+        pack();
+    }// </editor-fold>//GEN-END:initComponents
+
+    private void btnReservasActionPerformed(java.awt.event.ActionEvent evt) {
+        dateFechaReserva.requestFocusInWindow();
+    }
+
+    private void btnMisReservasActionPerformed(java.awt.event.ActionEvent evt) {
+        DashboardAlumno dashboard = new DashboardAlumno(idUsuario, nombreUsuario);
+        dashboard.setVisible(true);
+        dispose();
+        dashboard.abrirMisReservas();
+    }
+
+    private void btnCerrarSesionActionPerformed(java.awt.event.ActionEvent evt) {
+        int opcion = JOptionPane.showConfirmDialog(this, "Deseas cerrar sesion?", "Cerrar sesion", JOptionPane.YES_NO_OPTION);
+        if (opcion == JOptionPane.YES_OPTION) {
+            Login login = new Login();
+            login.setLocationRelativeTo(null);
+            login.setVisible(true);
+            dispose();
+        }
+    }
+
+    private void btnBuscarDisponibilidadActionPerformed(java.awt.event.ActionEvent evt) {
+        buscarDisponibilidad();
+    }
+
+    private void btnSolicitarReservaActionPerformed(java.awt.event.ActionEvent evt) {
+        solicitarReserva();
+    }
+
+    public static void main(String args[]) {
+        try {
+            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(info.getName())) {
+                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+        } catch (ReflectiveOperationException | javax.swing.UnsupportedLookAndFeelException ex) {
+            logger.log(java.util.logging.Level.SEVERE, null, ex);
+        }
+
+        java.awt.EventQueue.invokeLater(() -> {
+            ReservasAlumno reservas = new ReservasAlumno("Alumno");
+            reservas.setLocationRelativeTo(null);
+            reservas.setVisible(true);
+        });
+    }
+
+    // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JButton btnBuscarDisponibilidad;
+    private javax.swing.JButton btnCerrarSesion;
+    private javax.swing.JButton btnMisReservas;
+    private javax.swing.JButton btnReporteFallas;
+    private javax.swing.JButton btnReservas;
+    private javax.swing.JButton btnSolicitarReserva;
+    private javax.swing.JComboBox cmbHorario;
+    private javax.swing.JComboBox cmbLaboratorio;
+    private com.toedter.calendar.JDateChooser dateFechaReserva;
+    private javax.swing.JPanel headerBlanco;
+    private javax.swing.JLabel imgLabSync;
+    private javax.swing.JLabel imgUTJ;
+    private javax.swing.JScrollPane jScrollPaneTabla;
+    private javax.swing.JLabel lbActividad;
+    private javax.swing.JLabel lbFecha;
+    private javax.swing.JLabel lbHorario;
+    private javax.swing.JLabel lbLaboratorio;
+    private javax.swing.JLabel lbNombreUsuario;
+    private javax.swing.JLabel lbResumenFecha;
+    private javax.swing.JLabel lbResumenHorario;
+    private javax.swing.JLabel lbResumenLaboratorio;
+    private javax.swing.JLabel lbSubtituloPantalla;
+    private javax.swing.JLabel lbTituloFormulario;
+    private javax.swing.JLabel lbTituloPantalla;
+    private javax.swing.JLabel lbTituloResultados;
+    private javax.swing.JLabel lbTituloResumen;
+    private javax.swing.JPanel panelContenedor;
+    private javax.swing.JPanel panelFormulario;
+    private javax.swing.JPanel panelResultados;
+    private javax.swing.JPanel panelResumen;
+    private javax.swing.JPanel sidebarVerde;
+    private javax.swing.JTable tablaDisponibilidad;
+    private javax.swing.JTextField txtActividad;
+    private javax.swing.JTextField txtResumenFecha;
+    private javax.swing.JTextField txtResumenHorario;
+    private javax.swing.JTextField txtResumenLaboratorio;
+    // End of variables declaration//GEN-END:variables
+}
