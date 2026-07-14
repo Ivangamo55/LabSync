@@ -27,6 +27,32 @@ USE `labsync_db`;
 -- --------------------------------------------------------
 
 --
+-- Estructura de tabla para la tabla `bitacora`
+--
+
+DROP TABLE IF EXISTS `bitacora`;
+CREATE TABLE IF NOT EXISTS `bitacora` (
+  `id_bitacora` int NOT NULL AUTO_INCREMENT,
+  `fecha` date NOT NULL,
+  `nombre_usuario` varchar(100) NOT NULL,
+  `rol_usuario` varchar(50) NOT NULL,
+  `carrera_dependencia` varchar(100) NOT NULL,
+  `grado` varchar(20) DEFAULT NULL,
+  `grupo` varchar(20) DEFAULT NULL,
+  `laboratorio` varchar(50) NOT NULL,
+  `actividad_materia` varchar(150) NOT NULL,
+  `turno` varchar(50) NOT NULL,
+  `horario` varchar(50) NOT NULL,
+  `total_usuarios` int NOT NULL,
+  `observaciones` text,
+  `estado` varchar(50) DEFAULT 'Registrado',
+  `fecha_registro` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_bitacora`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Estructura de tabla para la tabla `estudiante`
 --
 

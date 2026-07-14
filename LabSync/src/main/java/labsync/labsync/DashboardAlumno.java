@@ -25,7 +25,16 @@ public class DashboardAlumno extends javax.swing.JFrame {
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
         configurarNavegacion();
         cargarDashboardAlumno();
+        configurarTablaReservaciones();
         setLocationRelativeTo(null);
+    }
+
+    private void configurarTablaReservaciones() {
+        // La tabla solo presenta un resumen; no hay una accion asociada a seleccionar filas.
+        tablaReservaciones.setRowSelectionAllowed(false);
+        tablaReservaciones.setCellSelectionEnabled(false);
+        tablaReservaciones.setFocusable(false);
+        tablaReservaciones.clearSelection();
     }
 
     private void configurarNavegacion() {

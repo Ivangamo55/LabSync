@@ -8,8 +8,10 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import javax.swing.BorderFactory;
 import javax.swing.JOptionPane;
 import javax.swing.table.DefaultTableModel;
@@ -70,7 +72,8 @@ public class ReservasAlumno extends javax.swing.JFrame {
 
     private void configurarFormulario() {
         dateFechaReserva.setMinSelectableDate(Date.valueOf(LocalDate.now()));
-        dateFechaReserva.setDate(Date.valueOf(LocalDate.now()));
+        dateFechaReserva.getJCalendar().getDayChooser().addDateEvaluator(new EvaluadorDiasClase());
+        dateFechaReserva.setDate(Date.valueOf(siguienteDiaDeClase(LocalDate.now())));
         txtResumenLaboratorio.setText("");
         txtResumenFecha.setText("");
         txtResumenHorario.setText("");
@@ -110,11 +113,74 @@ public class ReservasAlumno extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(this, "La fecha de la reserva no puede estar en el pasado.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
             return false;
         }
+        if (esFinDeSemana(fecha)) {
+            JOptionPane.showMessageDialog(this, "No se pueden realizar reservas en sabado o domingo porque no hay clases.", "Dia sin clases", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
         if (cmbHorario.getSelectedIndex() <= 0) {
             JOptionPane.showMessageDialog(this, "Selecciona un horario.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
             return false;
         }
         return true;
+    }
+
+    private static boolean esFinDeSemana(LocalDate fecha) {
+        DayOfWeek dia = fecha.getDayOfWeek();
+        return dia == DayOfWeek.SATURDAY || dia == DayOfWeek.SUNDAY;
+    }
+
+    private static LocalDate siguienteDiaDeClase(LocalDate fecha) {
+        LocalDate siguiente = fecha;
+        while (esFinDeSemana(siguiente)) {
+            siguiente = siguiente.plusDays(1);
+        }
+        return siguiente;
+    }
+
+    private static class EvaluadorDiasClase implements com.toedter.calendar.IDateEvaluator {
+
+        @Override
+        public boolean isSpecial(java.util.Date date) {
+            return false;
+        }
+
+        @Override
+        public Color getSpecialForegroundColor() {
+            return null;
+        }
+
+        @Override
+        public Color getSpecialBackroundColor() {
+            return null;
+        }
+
+        @Override
+        public String getSpecialTooltip() {
+            return null;
+        }
+
+        @Override
+        public boolean isInvalid(java.util.Date date) {
+            Calendar calendario = Calendar.getInstance();
+            calendario.setTime(date);
+            int dia = calendario.get(Calendar.DAY_OF_WEEK);
+            return dia == Calendar.SATURDAY || dia == Calendar.SUNDAY;
+        }
+
+        @Override
+        public Color getInvalidForegroundColor() {
+            return Color.GRAY;
+        }
+
+        @Override
+        public Color getInvalidBackroundColor() {
+            return new Color(238, 238, 238);
+        }
+
+        @Override
+        public String getInvalidTooltip() {
+            return "Sin clases: no se permiten reservas en fin de semana";
+        }
     }
 
     private void buscarDisponibilidad() {
@@ -460,7 +526,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
         panelFormulario.add(lbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(265, 65, -1, -1));
 
         cmbHorario.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        cmbHorario.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona horario", "07:00 - 09:00", "09:00 - 11:00", "11:00 - 13:00", "13:00 - 15:00", "15:00 - 17:00" }));
+        cmbHorario.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona horario", "7:00 - 7:50", "7:50 - 8:40", "9:10 - 10:00", "10:00 - 10:50", "10:50 - 11:40", "11:40 - 12:30", "12:30 - 13:20", "13:20 - 14:10", "14:10 - 15:00", "15:00 - 15:50", "15:50 - 16:40", "16:40 - 17:30", "18:00 - 18:50", "18:50 - 19:40", "19:40 - 20:30" }));
         panelFormulario.add(cmbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(265, 90, 210, 30));
 
         lbLaboratorio.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
