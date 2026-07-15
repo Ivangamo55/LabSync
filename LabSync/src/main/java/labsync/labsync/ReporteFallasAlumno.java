@@ -156,8 +156,8 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(this, "No se pueden registrar fallas en sabado.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
             return false;
         }
-        if (cmbTipoFalla.getSelectedIndex() <= 0 || cmbPrioridad.getSelectedIndex() <= 0) {
-            JOptionPane.showMessageDialog(this, "Selecciona el tipo de falla y la prioridad.", "Datos requeridos", JOptionPane.WARNING_MESSAGE);
+        if (cmbTipoFalla.getSelectedIndex() <= 0) {
+            JOptionPane.showMessageDialog(this, "Selecciona el tipo de falla.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
             return false;
         }
         if (txtDescripcion.getText().trim().isEmpty()) {
@@ -187,8 +187,8 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
             LocalTime hora = fecha.equals(LocalDate.now()) ? LocalTime.now() : LocalTime.NOON;
             String descripcion = "[Tipo: " + cmbTipoFalla.getSelectedItem() + "] " + txtDescripcion.getText().trim();
             String sql = "INSERT INTO reporte_fallas (codigo_equipo, nombre_equipo, "
-                + "laboratorio, reportado_por, rol_reportante, descripcion_falla, prioridad, estado, fecha_reporte) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
+                + "laboratorio, reportado_por, rol_reportante, descripcion_falla, estado, fecha_reporte) "
+                + "VALUES (?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
             try (PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setString(1, codigoEquipo);
                 ps.setNull(2, java.sql.Types.VARCHAR);
@@ -196,8 +196,7 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
                 ps.setString(4, usuario.nombreCompleto);
                 ps.setString(5, usuario.rol);
                 ps.setString(6, descripcion);
-                ps.setString(7, cmbPrioridad.getSelectedItem().toString());
-                ps.setTimestamp(8, Timestamp.valueOf(fecha.atTime(hora)));
+                ps.setTimestamp(7, Timestamp.valueOf(fecha.atTime(hora)));
                 ps.executeUpdate();
             }
             JOptionPane.showMessageDialog(this, "El reporte fue enviado y quedo Pendiente de revision.",
@@ -226,7 +225,6 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         txtEquipo.setText("");
         dateFechaFalla.setDate(java.sql.Date.valueOf(LocalDate.now()));
         cmbTipoFalla.setSelectedIndex(0);
-        cmbPrioridad.setSelectedIndex(0);
         txtDescripcion.setText("");
     }
 
@@ -359,8 +357,6 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         dateFechaFalla = new com.toedter.calendar.JDateChooser();
         lbTipoFalla = new javax.swing.JLabel();
         cmbTipoFalla = new javax.swing.JComboBox();
-        lbPrioridad = new javax.swing.JLabel();
-        cmbPrioridad = new javax.swing.JComboBox();
         lbDescripcion = new javax.swing.JLabel();
         scrollDescripcion = new javax.swing.JScrollPane();
         txtDescripcion = new javax.swing.JTextArea();
@@ -507,19 +503,10 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         cmbTipoFalla.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona tipo", "Hardware", "Software", "Red / Internet", "Mobiliario", "Otro" }));
         panelFormulario.add(cmbTipoFalla, new org.netbeans.lib.awtextra.AbsoluteConstraints(325, 155, 270, 30));
 
-        lbPrioridad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
-        lbPrioridad.setForeground(new java.awt.Color(102, 102, 102));
-        lbPrioridad.setText("Prioridad");
-        panelFormulario.add(lbPrioridad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 195, -1, -1));
-
-        cmbPrioridad.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        cmbPrioridad.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona prioridad", "Baja", "Media", "Alta" }));
-        panelFormulario.add(cmbPrioridad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 220, 270, 30));
-
         lbDescripcion.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbDescripcion.setForeground(new java.awt.Color(102, 102, 102));
         lbDescripcion.setText("Descripción de la falla");
-        panelFormulario.add(lbDescripcion, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 270, -1, -1));
+        panelFormulario.add(lbDescripcion, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 220, -1, -1));
 
         txtDescripcion.setColumns(20);
         txtDescripcion.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
@@ -529,7 +516,7 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         txtDescripcion.setWrapStyleWord(true);
         scrollDescripcion.setViewportView(txtDescripcion);
 
-        panelFormulario.add(scrollDescripcion, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 295, 570, 120));
+        panelFormulario.add(scrollDescripcion, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 255, 570, 160));
 
         btnLimpiar.setBackground(new java.awt.Color(108, 117, 125));
         btnLimpiar.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
@@ -640,7 +627,6 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
     private javax.swing.JButton btnReservas;
     private javax.swing.JButton btnVerDetalle;
     private javax.swing.JComboBox cmbLaboratorio;
-    private javax.swing.JComboBox cmbPrioridad;
     private javax.swing.JComboBox cmbTipoFalla;
     private com.toedter.calendar.JDateChooser dateFechaFalla;
     private javax.swing.JPanel headerBlanco;
@@ -655,7 +641,6 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
     private javax.swing.JLabel lbGuia3;
     private javax.swing.JLabel lbLaboratorio;
     private javax.swing.JLabel lbNombreUsuario;
-    private javax.swing.JLabel lbPrioridad;
     private javax.swing.JLabel lbSubtituloPantalla;
     private javax.swing.JLabel lbTipoFalla;
     private javax.swing.JLabel lbTituloFormulario;
