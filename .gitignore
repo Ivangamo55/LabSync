@@ -1,2 +1,5 @@
 # Project exclude paths
 /LabSync/target/
+# IntelliJ
+.idea/
+*.iml
