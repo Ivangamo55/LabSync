@@ -365,7 +365,7 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         panelFormulario.add(lbTurno, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 125, 100, 18));
         cmbTurno.setFont(new java.awt.Font("Arial", 0, 12));
         cmbTurno.setForeground(new java.awt.Color(51, 51, 51));
-        cmbTurno.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] {"Seleccionar", "Matutino", "Vespertino", "Mixto"}));
+        cmbTurno.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] {"Seleccionar", "Matutino", "Vespertino"}));
         cmbTurno.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
         panelFormulario.add(cmbTurno, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 147, 155, 28));
         lbCarrera.setFont(new java.awt.Font("Arial", 1, 12));
@@ -392,7 +392,7 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         panelFormulario.add(lbGrupo, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 192, 90, 18));
         cmbGrupo.setFont(new java.awt.Font("Arial", 0, 12));
         cmbGrupo.setForeground(new java.awt.Color(51, 51, 51));
-        cmbGrupo.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] {"Seleccionar", "A", "B", "C", "D", "N/A"}));
+        cmbGrupo.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] {"Seleccionar", "A", "B"}));
         cmbGrupo.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
         panelFormulario.add(cmbGrupo, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 214, 155, 28));
         lbActividad.setFont(new java.awt.Font("Arial", 1, 12));

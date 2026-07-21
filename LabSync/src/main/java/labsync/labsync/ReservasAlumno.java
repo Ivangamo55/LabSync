@@ -22,9 +22,6 @@ import javax.swing.table.DefaultTableModel;
 public class ReservasAlumno extends javax.swing.JFrame {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(ReservasAlumno.class.getName());
-    private static final String[] LABORATORIOS = {
-        "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03"
-    };
     private String nombreUsuario;
 
     public ReservasAlumno() {
@@ -282,14 +279,14 @@ public class ReservasAlumno extends javax.swing.JFrame {
     private boolean usuarioTieneReservaActiva(Connection con, DatosUsuario usuario) throws SQLException {
         String sql = "SELECT id_reserva "
             + "FROM reservas "
-            + "WHERE nombre_solicitante = ? "
-            + "AND rol_solicitante = ? "
-            + "AND estado <> 'Cancelada' "
+            + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ? AND rol_solicitante = ?)) "
+            + "AND estado NOT IN ('Cancelada', 'Finalizada', 'Rechazada') "
             + "LIMIT 1";
 
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, usuario.nombreCompleto);
-            ps.setString(2, usuario.rol);
+            ps.setInt(1, usuario.idUsuario);
+            ps.setString(2, usuario.nombreCompleto);
+            ps.setString(3, usuario.rol);
 
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
@@ -417,18 +414,19 @@ public class ReservasAlumno extends javax.swing.JFrame {
                 return;
             }
 
-            String sqlInsert = "INSERT INTO reservas (nombre_solicitante, rol_solicitante, "
+            String sqlInsert = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, "
                 + "laboratorio, actividad, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) "
-                + "VALUES (?, ?, ?, ?, 'N/A', 'N/A', ?, ?, ?, 1, 'Pendiente', NULL)";
+                + "VALUES (?, ?, ?, ?, ?, 'N/A', 'N/A', ?, ?, ?, 1, 'Pendiente', NULL)";
 
             try (PreparedStatement ps = con.prepareStatement(sqlInsert)) {
-                ps.setString(1, usuario.nombreCompleto);
-                ps.setString(2, usuario.rol);
-                ps.setString(3, laboratorio);
-                ps.setString(4, actividad);
-                ps.setString(5, usuario.turno);
-                ps.setDate(6, fecha);
-                ps.setString(7, horario);
+                ps.setInt(1, usuario.idUsuario);
+                ps.setString(2, usuario.nombreCompleto);
+                ps.setString(3, usuario.rol);
+                ps.setString(4, laboratorio);
+                ps.setString(5, actividad);
+                ps.setString(6, usuario.turno);
+                ps.setDate(7, fecha);
+                ps.setString(8, horario);
                 ps.executeUpdate();
             }
 
@@ -454,7 +452,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
     }
 
     private DatosUsuario obtenerDatosUsuario(Connection con) throws SQLException {
-        String sql = "SELECT CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) AS nombre_completo, "
+        String sql = "SELECT u.id, CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) AS nombre_completo, "
             + "u.rol, COALESCE(e.turno, 'No especificado') AS turno FROM usuario u "
             + "LEFT JOIN estudiante e ON e.id_usuario = u.id "
             + "WHERE u.nombre = ? LIMIT 1";
@@ -462,7 +460,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
             ps.setString(1, nombreUsuario);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return new DatosUsuario(rs.getString("nombre_completo"), rs.getString("rol"), rs.getString("turno"));
+                    return new DatosUsuario(rs.getInt("id"), rs.getString("nombre_completo"), rs.getString("rol"), rs.getString("turno"));
                 }
             }
         }
@@ -516,11 +514,13 @@ public class ReservasAlumno extends javax.swing.JFrame {
     }
 
     private static class DatosUsuario {
+        final int idUsuario;
         final String nombreCompleto;
         final String rol;
         final String turno;
 
-        DatosUsuario(String nombreCompleto, String rol, String turno) {
+        DatosUsuario(int idUsuario, String nombreCompleto, String rol, String turno) {
+            this.idUsuario = idUsuario;
             this.nombreCompleto = nombreCompleto;
             this.rol = rol;
             this.turno = turno;
@@ -554,6 +554,11 @@ public class ReservasAlumno extends javax.swing.JFrame {
         lbActividad = new javax.swing.JLabel();
         txtActividad = new javax.swing.JTextField();
         btnBuscarDisponibilidad = new javax.swing.JButton();
+        panelGuia = new javax.swing.JPanel();
+        lbTituloGuia = new javax.swing.JLabel();
+        lbGuia1 = new javax.swing.JLabel();
+        lbGuia2 = new javax.swing.JLabel();
+        lbGuia3 = new javax.swing.JLabel();
         panelResultados = new javax.swing.JPanel();
         lbTituloResultados = new javax.swing.JLabel();
         jScrollPaneTabla = new javax.swing.JScrollPane();
@@ -653,7 +658,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
         panelContenedor.add(lbSubtituloPantalla, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 58, -1, -1));
 
         panelFormulario.setBackground(new java.awt.Color(255, 255, 255));
-        panelFormulario.setPreferredSize(new java.awt.Dimension(960, 220));
+        panelFormulario.setPreferredSize(new java.awt.Dimension(650, 220));
         panelFormulario.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
 
         lbTituloFormulario.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
@@ -671,25 +676,25 @@ public class ReservasAlumno extends javax.swing.JFrame {
         dateFechaReserva.setForeground(new java.awt.Color(51, 51, 51));
         dateFechaReserva.setDateFormatString("yyyy-MM-dd");
         dateFechaReserva.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        panelFormulario.add(dateFechaReserva, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 90, 210, 30));
+        panelFormulario.add(dateFechaReserva, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 90, 175, 30));
 
         lbHorario.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbHorario.setForeground(new java.awt.Color(102, 102, 102));
         lbHorario.setText("Horario");
-        panelFormulario.add(lbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(265, 65, -1, -1));
+        panelFormulario.add(lbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 65, -1, -1));
 
         cmbHorario.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         cmbHorario.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona horario", "7:00 - 7:50", "7:50 - 8:40", "9:10 - 10:00", "10:00 - 10:50", "10:50 - 11:40", "11:40 - 12:30", "12:30 - 13:20", "13:20 - 14:10", "14:10 - 15:00", "15:00 - 15:50", "15:50 - 16:40", "16:40 - 17:30", "18:00 - 18:50", "18:50 - 19:40", "19:40 - 20:30" }));
-        panelFormulario.add(cmbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(265, 90, 210, 30));
+        panelFormulario.add(cmbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 90, 175, 30));
 
         lbLaboratorio.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbLaboratorio.setForeground(new java.awt.Color(102, 102, 102));
         lbLaboratorio.setText("Laboratorio");
-        panelFormulario.add(lbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(505, 65, -1, -1));
+        panelFormulario.add(lbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(415, 65, -1, -1));
 
         cmbLaboratorio.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio", "PB-05", "M-11", "M-12", "M-13" }));
-        panelFormulario.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(505, 90, 210, 30));
+        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio" }));
+        panelFormulario.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(415, 90, 210, 30));
 
         lbActividad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbActividad.setForeground(new java.awt.Color(102, 102, 102));
@@ -700,7 +705,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
         txtActividad.setForeground(new java.awt.Color(51, 51, 51));
         txtActividad.setText("Ej. práctica, proyecto, exposición...");
         txtActividad.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
-        panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 165, 690, 30));
+        panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 165, 380, 30));
 
         btnBuscarDisponibilidad.setBackground(new java.awt.Color(8, 173, 141));
         btnBuscarDisponibilidad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
@@ -709,9 +714,36 @@ public class ReservasAlumno extends javax.swing.JFrame {
         btnBuscarDisponibilidad.setBorderPainted(false);
         btnBuscarDisponibilidad.setFocusPainted(false);
         btnBuscarDisponibilidad.addActionListener(this::btnBuscarDisponibilidadActionPerformed);
-        panelFormulario.add(btnBuscarDisponibilidad, new org.netbeans.lib.awtextra.AbsoluteConstraints(745, 165, 190, 30));
+        panelFormulario.add(btnBuscarDisponibilidad, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 165, 195, 30));
 
-        panelContenedor.add(panelFormulario, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 95, 960, 220));
+        panelContenedor.add(panelFormulario, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 95, 650, 220));
+
+        panelGuia.setBackground(new java.awt.Color(255, 255, 255));
+        panelGuia.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(220, 220, 220)));
+        panelGuia.setPreferredSize(new java.awt.Dimension(290, 220));
+        panelGuia.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        lbTituloGuia.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
+        lbTituloGuia.setForeground(new java.awt.Color(102, 102, 102));
+        lbTituloGuia.setText("Guía rápida");
+        panelGuia.add(lbTituloGuia, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 18, 220, 26));
+
+        lbGuia1.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        lbGuia1.setForeground(new java.awt.Color(102, 102, 102));
+        lbGuia1.setText("<html>1. Selecciona fecha, horario y un laboratorio disponible.</html>");
+        panelGuia.add(lbGuia1, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 55, 240, 42));
+
+        lbGuia2.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        lbGuia2.setForeground(new java.awt.Color(102, 102, 102));
+        lbGuia2.setText("<html>2. Escribe la actividad y pulsa Buscar disponibilidad.</html>");
+        panelGuia.add(lbGuia2, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 100, 240, 42));
+
+        lbGuia3.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        lbGuia3.setForeground(new java.awt.Color(102, 102, 102));
+        lbGuia3.setText("<html>3. Elige una fila y solicita. Tu usuario, turno y el estado Pendiente se guardan automáticamente.</html>");
+        panelGuia.add(lbGuia3, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 145, 240, 62));
+
+        panelContenedor.add(panelGuia, new org.netbeans.lib.awtextra.AbsoluteConstraints(705, 95, 290, 220));
 
         panelResultados.setBackground(new java.awt.Color(255, 255, 255));
         panelResultados.setPreferredSize(new java.awt.Dimension(625, 255));
@@ -876,6 +908,9 @@ public class ReservasAlumno extends javax.swing.JFrame {
     private javax.swing.JScrollPane jScrollPaneTabla;
     private javax.swing.JLabel lbActividad;
     private javax.swing.JLabel lbFecha;
+    private javax.swing.JLabel lbGuia1;
+    private javax.swing.JLabel lbGuia2;
+    private javax.swing.JLabel lbGuia3;
     private javax.swing.JLabel lbHorario;
     private javax.swing.JLabel lbLaboratorio;
     private javax.swing.JLabel lbNombreUsuario;
@@ -884,11 +919,13 @@ public class ReservasAlumno extends javax.swing.JFrame {
     private javax.swing.JLabel lbResumenLaboratorio;
     private javax.swing.JLabel lbSubtituloPantalla;
     private javax.swing.JLabel lbTituloFormulario;
+    private javax.swing.JLabel lbTituloGuia;
     private javax.swing.JLabel lbTituloPantalla;
     private javax.swing.JLabel lbTituloResultados;
     private javax.swing.JLabel lbTituloResumen;
     private javax.swing.JPanel panelContenedor;
     private javax.swing.JPanel panelFormulario;
+    private javax.swing.JPanel panelGuia;
     private javax.swing.JPanel panelResultados;
     private javax.swing.JPanel panelResumen;
     private javax.swing.JPanel sidebarVerde;

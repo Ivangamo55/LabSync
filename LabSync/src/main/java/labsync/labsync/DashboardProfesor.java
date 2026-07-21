@@ -125,7 +125,7 @@ public class DashboardProfesor extends javax.swing.JFrame {
             }
             String sqlReportes = "SELECT COUNT(*) total FROM reporte_fallas "
                     + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND reportado_por = ?)) "
-                    + "AND rol_reportante = 'Profesor' AND estado <> 'Resuelto'";
+                    + "AND rol_reportante = 'Profesor' AND estado IN ('Pendiente', 'En revisión')";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlReportes)) {
                 ps.setInt(1, sesion.getId());
                 ps.setString(2, sesion.getNombreCompleto());

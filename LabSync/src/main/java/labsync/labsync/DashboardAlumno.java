@@ -92,7 +92,8 @@ public class DashboardAlumno extends javax.swing.JFrame {
             }
 
             String sqlTabla = "SELECT fecha, horario, laboratorio, actividad, estado FROM reservas WHERE " + filtro
-                + " AND fecha >= CURDATE() ORDER BY fecha, horario LIMIT 5";
+                + " AND fecha >= CURDATE() AND estado IN ('Pendiente','Aprobada') "
+                + "ORDER BY fecha, horario LIMIT 5";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlTabla)) {
                 asignarUsuario(ps);
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
@@ -103,7 +104,8 @@ public class DashboardAlumno extends javax.swing.JFrame {
             }
 
             String sqlReportes = "SELECT COUNT(*) total FROM reporte_fallas "
-                + "WHERE SUBSTRING_INDEX(TRIM(reportado_por), ' ', 1) = ?";
+                + "WHERE SUBSTRING_INDEX(TRIM(reportado_por), ' ', 1) = ? "
+                + "AND rol_reportante = 'Estudiante' AND estado IN ('Pendiente', 'En revisión')";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlReportes)) {
                 asignarUsuario(ps);
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
@@ -320,7 +322,7 @@ public class DashboardAlumno extends javax.swing.JFrame {
 
         lbTituloReportes.setFont(new java.awt.Font("Arial", 1, 15)); // NOI18N
         lbTituloReportes.setForeground(new java.awt.Color(70, 70, 70));
-        lbTituloReportes.setText("Reportes enviados");
+        lbTituloReportes.setText("Reportes pendientes");
         tarjetaReportes.add(lbTituloReportes, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 25, 220, 25));
 
         lbValorReportes.setFont(new java.awt.Font("Arial", 1, 42)); // NOI18N
@@ -390,40 +392,40 @@ public class DashboardAlumno extends javax.swing.JFrame {
 
         lbTituloAvisos.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
         lbTituloAvisos.setForeground(new java.awt.Color(8, 173, 141));
-        lbTituloAvisos.setText("Avisos");
+        lbTituloAvisos.setText("Guía del alumno");
         panelAvisos.add(lbTituloAvisos, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 18, 220, 30));
 
         lbAviso1Titulo.setFont(new java.awt.Font("Arial", 1, 13)); // NOI18N
         lbAviso1Titulo.setForeground(new java.awt.Color(70, 70, 70));
-        lbAviso1Titulo.setText("Llega a tiempo");
+        lbAviso1Titulo.setText("Solicita tu reserva");
         panelAvisos.add(lbAviso1Titulo, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 70, 240, 20));
 
         lbAviso1Texto.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         lbAviso1Texto.setForeground(new java.awt.Color(90, 90, 90));
-        lbAviso1Texto.setText("<html>Sé puntual para aprovechar al máximo tu reservación.</html>");
-        panelAvisos.add(lbAviso1Texto, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 92, 245, 35));
-        panelAvisos.add(separadorAviso1, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 140, 245, 10));
+        lbAviso1Texto.setText("<html>Selecciona fecha, horario, laboratorio y actividad. La solicitud se guarda como Pendiente.</html>");
+        panelAvisos.add(lbAviso1Texto, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 92, 245, 45));
+        panelAvisos.add(separadorAviso1, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 145, 245, 10));
 
         lbAviso2Titulo.setFont(new java.awt.Font("Arial", 1, 13)); // NOI18N
         lbAviso2Titulo.setForeground(new java.awt.Color(70, 70, 70));
-        lbAviso2Titulo.setText("Cuida el laboratorio");
+        lbAviso2Titulo.setText("Consulta el estado");
         panelAvisos.add(lbAviso2Titulo, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 155, 240, 20));
 
         lbAviso2Texto.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         lbAviso2Texto.setForeground(new java.awt.Color(90, 90, 90));
-        lbAviso2Texto.setText("<html>Respeta las normas y mantén el espacio limpio.</html>");
-        panelAvisos.add(lbAviso2Texto, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 177, 245, 35));
-        panelAvisos.add(separadorAviso2, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 225, 245, 10));
+        lbAviso2Texto.setText("<html>Revisa si tu reserva está Pendiente, Aprobada, Rechazada, Cancelada o Finalizada.</html>");
+        panelAvisos.add(lbAviso2Texto, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 177, 245, 48));
+        panelAvisos.add(separadorAviso2, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 232, 245, 10));
 
         lbAviso3Titulo.setFont(new java.awt.Font("Arial", 1, 13)); // NOI18N
         lbAviso3Titulo.setForeground(new java.awt.Color(70, 70, 70));
-        lbAviso3Titulo.setText("Reporta cualquier falla");
-        panelAvisos.add(lbAviso3Titulo, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 240, 240, 20));
+        lbAviso3Titulo.setText("Reporta una falla");
+        panelAvisos.add(lbAviso3Titulo, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 245, 240, 20));
 
         lbAviso3Texto.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         lbAviso3Texto.setForeground(new java.awt.Color(90, 90, 90));
-        lbAviso3Texto.setText("<html>Tu reporte ayuda a mantener los laboratorios en buen estado.</html>");
-        panelAvisos.add(lbAviso3Texto, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 262, 245, 45));
+        lbAviso3Texto.setText("<html>Indica laboratorio, código del equipo, fecha, tipo y descripción para facilitar su seguimiento.</html>");
+        panelAvisos.add(lbAviso3Texto, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 267, 245, 55));
 
         panelContenedor.add(panelAvisos, new org.netbeans.lib.awtextra.AbsoluteConstraints(690, 220, 305, 340));
 

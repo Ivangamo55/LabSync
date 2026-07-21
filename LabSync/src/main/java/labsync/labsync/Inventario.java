@@ -29,9 +29,15 @@ public class Inventario extends javax.swing.JFrame {
     private final Color COLOR_PLACEHOLDER = new Color(150, 150, 150);
     private final Color COLOR_TEXTO = new Color(51, 51, 51);
     private final String PH_BUSCAR = "Código, marca, modelo o No. serie";   
+
+    private void cargarLaboratoriosDesdeBD() {
+        LaboratoriosBD.cargarDisponibles(cmbLaboratorioModal, "Selecciona");
+        LaboratoriosBD.cargarTodos(laboratorio, "Todos");
+    }
     
     public Inventario(String nombreRecibido) {
         initComponents();
+        cargarLaboratoriosDesdeBD();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
        
         this.nombreUsuario = nombreRecibido;
@@ -47,6 +53,7 @@ public class Inventario extends javax.swing.JFrame {
 
     public Inventario() {
         initComponents();
+        cargarLaboratoriosDesdeBD();
         
         txtObservaciones.setLineWrap(true);
         txtObservaciones.setWrapStyleWord(true);
@@ -1090,7 +1097,7 @@ public class Inventario extends javax.swing.JFrame {
         cmbLaboratorioModal.setBackground(new java.awt.Color(255, 255, 255));
         cmbLaboratorioModal.setFont(new java.awt.Font("Arial", 1, 12)); // NOI18N
         cmbLaboratorioModal.setForeground(new java.awt.Color(102, 102, 102));
-        cmbLaboratorioModal.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Selecciona", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        cmbLaboratorioModal.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Selecciona" }));
         cmbLaboratorioModal.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         bodyModal.add(cmbLaboratorioModal, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 340, 220, -1));
 
@@ -1239,7 +1246,7 @@ public class Inventario extends javax.swing.JFrame {
         laboratorio.setBackground(new java.awt.Color(255, 255, 255));
         laboratorio.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         laboratorio.setForeground(new java.awt.Color(102, 102, 102));
-        laboratorio.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        laboratorio.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos" }));
         laboratorio.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         laboratorio.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         laboratorio.setPreferredSize(new java.awt.Dimension(150, 30));

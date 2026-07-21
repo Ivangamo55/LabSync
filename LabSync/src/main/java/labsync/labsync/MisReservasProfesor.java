@@ -7,6 +7,11 @@ package labsync.labsync;
  */
 public class MisReservasProfesor extends javax.swing.JFrame {
 
+    private static final String PLACEHOLDER_BUSQUEDA =
+            "Buscar por fecha, horario, laboratorio, grupo o actividad";
+    private static final java.awt.Color COLOR_PLACEHOLDER = new java.awt.Color(140, 140, 140);
+    private static final java.awt.Color COLOR_TEXTO = new java.awt.Color(51, 51, 51);
+
     private String nombreUsuario;
     private SesionUsuario sesion;
 
@@ -80,6 +85,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
     }
 
     private void configurarPantalla() {
+        configurarPlaceholderBusqueda();
         tablaReservas.setModel(new javax.swing.table.DefaultTableModel(new Object[][]{}, new String[]{"ID", "Fecha", "Horario", "Laboratorio", "Grupo", "Actividad", "Estado"}) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
         });
@@ -91,6 +97,36 @@ public class MisReservasProfesor extends javax.swing.JFrame {
         btnVerDetalle.addActionListener(e -> verDetalle());
         btnCancelar.addActionListener(e -> cancelarReserva());
         btnIrBitacora.addActionListener(e -> abrirBitacora());
+    }
+
+    private void configurarPlaceholderBusqueda() {
+        mostrarPlaceholderBusqueda();
+        txtBuscar.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                if (esPlaceholderBusqueda()) {
+                    txtBuscar.setText("");
+                    txtBuscar.setForeground(COLOR_TEXTO);
+                }
+            }
+
+            @Override
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                if (txtBuscar.getText().trim().isEmpty()) {
+                    mostrarPlaceholderBusqueda();
+                }
+            }
+        });
+    }
+
+    private void mostrarPlaceholderBusqueda() {
+        txtBuscar.setText(PLACEHOLDER_BUSQUEDA);
+        txtBuscar.setForeground(COLOR_PLACEHOLDER);
+    }
+
+    private boolean esPlaceholderBusqueda() {
+        return PLACEHOLDER_BUSQUEDA.equals(txtBuscar.getText())
+                && COLOR_PLACEHOLDER.equals(txtBuscar.getForeground());
     }
 
     private void cargarReservas() {
@@ -117,7 +153,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
         javax.swing.table.TableRowSorter<javax.swing.table.TableModel> sorter = new javax.swing.table.TableRowSorter<>(tablaReservas.getModel());
         tablaReservas.setRowSorter(sorter);
         java.util.List<javax.swing.RowFilter<Object, Object>> filtros = new java.util.ArrayList<>();
-        String texto = txtBuscar.getText().trim();
+        String texto = esPlaceholderBusqueda() ? "" : txtBuscar.getText().trim();
         if (!texto.isEmpty()) filtros.add(javax.swing.RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(texto)));
         if (cmbEstado.getSelectedIndex() > 0) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(cmbEstado.getSelectedItem().toString()) + "$", 6));
         if (cmbLaboratorio.getSelectedIndex() > 0) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(cmbLaboratorio.getSelectedItem().toString()) + "$", 3));
@@ -333,7 +369,8 @@ public class MisReservasProfesor extends javax.swing.JFrame {
         panelFiltros.add(lbBuscar, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 10, 100, 18));
         txtBuscar.setBackground(new java.awt.Color(255, 255, 255));
         txtBuscar.setFont(new java.awt.Font("Arial", 0, 12));
-        txtBuscar.setForeground(new java.awt.Color(51, 51, 51));
+        txtBuscar.setForeground(new java.awt.Color(140, 140, 140));
+        txtBuscar.setText("Buscar por fecha, horario, laboratorio, grupo o actividad");
         txtBuscar.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
         panelFiltros.add(txtBuscar, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 31, 360, 30));
         lbFiltroEstado.setFont(new java.awt.Font("Arial", 1, 12));

@@ -559,11 +559,10 @@
                   <Color blue="33" green="33" red="33" type="rgb"/>
                 </Property>
                 <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
-                  <StringArray count="4">
+                  <StringArray count="3">
                     <StringItem index="0" value="Seleccionar"/>
                     <StringItem index="1" value="Matutino"/>
                     <StringItem index="2" value="Vespertino"/>
-                    <StringItem index="3" value="Mixto"/>
                   </StringArray>
                 </Property>
                 <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">
@@ -660,12 +659,10 @@
                   <Color blue="33" green="33" red="33" type="rgb"/>
                 </Property>
                 <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
-                  <StringArray count="5">
+                  <StringArray count="3">
                     <StringItem index="0" value="Seleccionar"/>
                     <StringItem index="1" value="A"/>
                     <StringItem index="2" value="B"/>
-                    <StringItem index="3" value="C"/>
-                    <StringItem index="4" value="D"/>
                   </StringArray>
                 </Property>
                 <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">

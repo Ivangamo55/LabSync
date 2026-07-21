@@ -30,6 +30,7 @@ public class Reserva extends javax.swing.JFrame {
     
     public Reserva(String nombreRecibido) {
         initComponents();
+        LaboratoriosBD.cargarTodos(cmbLaboratorio, "Todos");
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
         this.nombreUsuario = nombreRecibido;
@@ -44,6 +45,7 @@ public class Reserva extends javax.swing.JFrame {
 
     public Reserva() {
         initComponents();
+        LaboratoriosBD.cargarTodos(cmbLaboratorio, "Todos");
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
         ponerPlaceholderBuscar();
@@ -1043,7 +1045,7 @@ public class Reserva extends javax.swing.JFrame {
         cmbLaboratorio.setBackground(new java.awt.Color(255, 255, 255));
         cmbLaboratorio.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         cmbLaboratorio.setForeground(new java.awt.Color(102, 102, 102));
-        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos" }));
         cmbLaboratorio.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         header.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(340, 80, 170, 30));
 
