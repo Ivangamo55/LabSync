@@ -126,7 +126,8 @@ public class ReservasAlumno extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(this, "Selecciona un horario.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
             return false;
         }
-        return true;
+        return ValidacionFechas.validarHorarioFuturo(
+            this, fecha, cmbHorario.getSelectedItem().toString());
     }
 
     private void cargarLaboratoriosDesdeBD() {
@@ -173,7 +174,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
             ? cmbLaboratorio.getSelectedItem().toString()
             : "";
 
-        String sqlLaboratorios = "SELECT nombre, total_equipos "
+        String sqlLaboratorios = "SELECT nombre "
             + "FROM laboratorios "
             + "WHERE estado = 'Disponible' ";
 
@@ -185,13 +186,6 @@ public class ReservasAlumno extends javax.swing.JFrame {
         }
 
         sqlLaboratorios += "ORDER BY nombre ASC";
-
-        String sqlReservas = "SELECT COUNT(*) AS total "
-            + "FROM reservas "
-            + "WHERE laboratorio = ? "
-            + "AND fecha = ? "
-            + "AND horario = ? "
-            + "AND estado IN ('Pendiente', 'Aprobada')";
 
         try (Connection con = ConexionBD.conectar()) {
             if (con == null) {
@@ -205,37 +199,21 @@ public class ReservasAlumno extends javax.swing.JFrame {
                 }
 
                 try (ResultSet rsLaboratorios = psLaboratorios.executeQuery()) {
+                    DisponibilidadService servicio = new DisponibilidadService();
                     while (rsLaboratorios.next()) {
                         String laboratorioActual = rsLaboratorios.getString("nombre");
-                        int totalEquipos = rsLaboratorios.getInt("total_equipos");
-                        int reservasActivas = 0;
-
-                        try (PreparedStatement psReservas = con.prepareStatement(sqlReservas)) {
-                            psReservas.setString(1, laboratorioActual);
-                            psReservas.setDate(2, fecha);
-                            psReservas.setString(3, horario);
-
-                            try (ResultSet rsReservas = psReservas.executeQuery()) {
-                                if (rsReservas.next()) {
-                                    reservasActivas = rsReservas.getInt("total");
-                                }
-                            }
-                        }
-
-                        int equiposDisponibles = totalEquipos - reservasActivas;
-
-                        if (equiposDisponibles < 0) {
-                            equiposDisponibles = 0;
-                        }
-
-                        String estado = equiposDisponibles > 0 ? "Disponible" : "Ocupado";
+                        DisponibilidadService.ResultadoDisponibilidad resultado
+                                = servicio.consultarParaAlumno(
+                                        con, laboratorioActual, fecha.toLocalDate(), horario, false);
+                        int equiposDisponibles = resultado.getEquiposDisponibles();
+                        String estado = resultado.estaDisponible() ? "Disponible" : "Ocupado";
 
                         modelo.addRow(new Object[]{
                             laboratorioActual,
                             horario,
                             equiposDisponibles,
                             estado,
-                            equiposDisponibles > 0 ? "Seleccionar" : "--"
+                            resultado.estaDisponible() ? "Seleccionar" : "--"
                         });
                     }
                 }
@@ -351,65 +329,23 @@ public class ReservasAlumno extends javax.swing.JFrame {
             String horario = txtResumenHorario.getText();
             Date fecha = Date.valueOf(txtResumenFecha.getText());
 
-            String sqlTotalEquipos = "SELECT total_equipos "
-                + "FROM laboratorios "
-                + "WHERE nombre = ? "
-                + "AND estado = 'Disponible' "
-                + "FOR UPDATE";
-
-            String sqlReservasActivas = "SELECT id_reserva "
-                + "FROM reservas "
-                + "WHERE laboratorio = ? "
-                + "AND fecha = ? "
-                + "AND horario = ? "
-                + "AND estado IN ('Pendiente', 'Aprobada') "
-                + "FOR UPDATE";
-
-            int totalEquipos = 0;
-            int reservasActivas = 0;
-
-            try (PreparedStatement ps = con.prepareStatement(sqlTotalEquipos)) {
-                ps.setString(1, laboratorio);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        totalEquipos = rs.getInt("total_equipos");
-                    } else {
-                        con.rollback();
-                        JOptionPane.showMessageDialog(
-                            this,
-                            "El laboratorio seleccionado no esta registrado o no esta disponible.",
-                            "Laboratorio no disponible",
-                            JOptionPane.WARNING_MESSAGE
-                        );
-                        buscarDisponibilidad();
-                        return;
-                    }
-                }
-            }
-
-            try (PreparedStatement ps = con.prepareStatement(sqlReservasActivas)) {
-                ps.setString(1, laboratorio);
-                ps.setDate(2, fecha);
-                ps.setString(3, horario);
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        reservasActivas++;
-                    }
-                }
-            }
-
-            if (reservasActivas >= totalEquipos) {
+            if (!ValidacionFechas.validarHorarioFuturo(this, fecha.toLocalDate(), horario)) {
                 con.rollback();
+                limpiarResumen();
+                return;
+            }
 
+            DisponibilidadService.ResultadoDisponibilidad disponibilidad
+                    = new DisponibilidadService().consultarParaAlumno(
+                            con, laboratorio, fecha.toLocalDate(), horario, true);
+            if (!disponibilidad.estaDisponible()) {
+                con.rollback();
                 JOptionPane.showMessageDialog(
                     this,
-                    "Ya no hay equipos disponibles en este laboratorio para ese horario.",
+                    disponibilidad.getMensaje(),
                     "Sin disponibilidad",
                     JOptionPane.WARNING_MESSAGE
                 );
-
                 buscarDisponibilidad();
                 return;
             }

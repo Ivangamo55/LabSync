@@ -419,76 +419,77 @@ public class Mantenimiento extends javax.swing.JFrame {
     }
     
     private boolean guardarMantenimientoBD() {
-        String codigoEquipo
-                = cmbCodigoEquipo.getSelectedItem().toString();
+        return guardarMantenimiento(null);
+    }
 
-        String nombreEquipo = "N/A";
-        String laboratorio = txtLaboratorioModal.getText().trim();
-
-        String tipoMantenimiento
-                = cmbTipoMantModal.getSelectedItem().toString();
-
-        String fechaProgramada = obtenerFechaProgramada();
-
-        String estadoMantenimiento
-                = cmbEstadoMantModal.getSelectedItem().toString();
-
-        String responsable = txtResponsable.getText().trim();
-        String observaciones = txtObservacionesMant.getText().trim();
-
+    private boolean guardarMantenimiento(Integer idMantenimiento) {
         java.sql.Connection con = ConexionBD.conectar();
-
         if (con == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                addMantenimiento,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
+            javax.swing.JOptionPane.showMessageDialog(addMantenimiento,
+                    "No hay conexión con la base de datos.", "Error de conexión",
+                    javax.swing.JOptionPane.ERROR_MESSAGE);
             return false;
         }
-
-        String sql = "INSERT INTO mantenimiento "
-                + "(codigo_equipo, nombre_equipo, laboratorio, "
-                + "tipo_mantenimiento, fecha_programada, estado, "
-                + "responsable, observaciones) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-
-        try {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-
-            ps.setString(1, codigoEquipo);
-            ps.setString(2, nombreEquipo);
-            ps.setString(3, laboratorio);
-            ps.setString(4, tipoMantenimiento);
-            ps.setString(5, fechaProgramada);
-            ps.setString(6, estadoMantenimiento);
-            ps.setString(7, responsable);
-            ps.setString(8, observaciones);
-
-            int filas = ps.executeUpdate();
-
-            return filas > 0;
-
-        } catch (java.sql.SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                addMantenimiento,
-                "Error al guardar el mantenimiento: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return false;
-
-        } finally {
+        MantenimientoService.DatosMantenimiento datos = new MantenimientoService.DatosMantenimiento(
+                cmbCodigoEquipo.getSelectedItem().toString(),
+                txtLaboratorioModal.getText().trim(),
+                cmbTipoMantModal.getSelectedItem().toString(),
+                dateFechaProgramada.getDate().toInstant()
+                        .atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
+                cmbEstadoMantModal.getSelectedItem().toString(),
+                txtResponsable.getText().trim(),
+                txtObservacionesMant.getText().trim());
+        try (con) {
+            con.setAutoCommit(false);
             try {
-                con.close();
+                new MantenimientoService().guardar(con, datos, idMantenimiento);
+                con.commit();
+                return true;
+            } catch (MantenimientoService.ConflictoMantenimientoException ex) {
+                con.rollback();
+                javax.swing.JOptionPane.showMessageDialog(addMantenimiento, ex.getMessage(),
+                        "Conflicto con reservas", javax.swing.JOptionPane.WARNING_MESSAGE);
             } catch (java.sql.SQLException ex) {
-                logger.log(
-                    java.util.logging.Level.WARNING,
-                    "No se pudo cerrar la conexión.",
-                    ex
-                );
+                con.rollback();
+                throw ex;
             }
+        } catch (java.sql.SQLException ex) {
+            javax.swing.JOptionPane.showMessageDialog(addMantenimiento,
+                    "Error al guardar el mantenimiento: " + ex.getMessage(),
+                    "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
+        return false;
+    }
+
+    private void cambiarEstadoMantenimiento(
+            int idMantenimiento, String codigoEquipo, boolean realizado) {
+        try (java.sql.Connection con = ConexionBD.conectar()) {
+            if (con == null) {
+                throw new java.sql.SQLException("No hay conexión con la base de datos.");
+            }
+            con.setAutoCommit(false);
+            try {
+                MantenimientoService servicio = new MantenimientoService();
+                if (realizado) {
+                    servicio.finalizar(con, idMantenimiento, codigoEquipo);
+                } else {
+                    servicio.cancelar(con, idMantenimiento, codigoEquipo);
+                }
+                con.commit();
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        realizado ? "Mantenimiento marcado como realizado."
+                                : "Mantenimiento cancelado correctamente.",
+                        realizado ? "Actualización exitosa" : "Cancelación exitosa",
+                        javax.swing.JOptionPane.INFORMATION_MESSAGE);
+                cargarTablaMantenimientoFiltrada();
+            } catch (java.sql.SQLException ex) {
+                con.rollback();
+                throw ex;
+            }
+        } catch (java.sql.SQLException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "No se pudo actualizar el mantenimiento: " + ex.getMessage(),
+                    "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
         }
     }
     
@@ -1739,14 +1740,9 @@ public class Mantenimiento extends javax.swing.JFrame {
         }
 
         if (modoEdicion) {
-            boolean actualizado = actualizarMantenimientoBD();
+            boolean actualizado = guardarMantenimiento(idMantenimientoSeleccionado);
 
             if (actualizado) {
-                String codigoEquipo = cmbCodigoEquipo.getSelectedItem().toString();
-                String estadoMantenimiento = cmbEstadoMantModal.getSelectedItem().toString();
-                
-                actualizarEstadoInventarioPorMantenimiento(codigoEquipo, estadoMantenimiento);
-                
                 javax.swing.JOptionPane.showMessageDialog(
                     addMantenimiento,
                     "Mantenimiento actualizado correctamente.",
@@ -1780,10 +1776,6 @@ public class Mantenimiento extends javax.swing.JFrame {
             boolean guardado = guardarMantenimientoBD();
 
             if (guardado) {
-                String estadoMantenimiento = cmbEstadoMantModal.getSelectedItem().toString();
-                
-                actualizarEstadoInventarioPorMantenimiento(codigoEquipo, estadoMantenimiento);
-                
                 javax.swing.JOptionPane.showMessageDialog(
                     addMantenimiento,
                     "Mantenimiento registrado correctamente.",
@@ -1831,7 +1823,7 @@ public class Mantenimiento extends javax.swing.JFrame {
         );
         
         if (confirmacion == javax.swing.JOptionPane.YES_OPTION) {
-            marcarMantenimientoRealizado(idMantenimiento, codigoEquipo);
+            cambiarEstadoMantenimiento(idMantenimiento, codigoEquipo, true);
         }
     }//GEN-LAST:event_btnRealizadoActionPerformed
 
@@ -1849,6 +1841,7 @@ public class Mantenimiento extends javax.swing.JFrame {
         }
         
         int idMantenimiento = Integer.parseInt(tablaMantenimiento.getValueAt(filaSeleccionada, 0).toString());
+        String codigoEquipo = tablaMantenimiento.getValueAt(filaSeleccionada, 1).toString();
         
         int confirmacion = javax.swing.JOptionPane.showConfirmDialog(
             this,
@@ -1859,7 +1852,7 @@ public class Mantenimiento extends javax.swing.JFrame {
         );
         
         if (confirmacion == javax.swing.JOptionPane.YES_OPTION) {
-            cancelarMantenimiento(idMantenimiento);
+            cambiarEstadoMantenimiento(idMantenimiento, codigoEquipo, false);
         }
     }//GEN-LAST:event_btnCancelarActionPerformed
 

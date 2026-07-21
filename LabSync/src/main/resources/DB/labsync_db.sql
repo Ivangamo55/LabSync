@@ -237,6 +237,7 @@ CREATE TABLE `mantenimiento` (
   PRIMARY KEY (`id_mantenimiento`),
   KEY `fk_mantenimiento_inventario_codigo` (`codigo_equipo`),
   KEY `idx_mantenimiento_id_falla` (`id_falla`),
+  KEY `idx_mantenimiento_disponibilidad` (`laboratorio`,`estado`,`fecha_programada`),
   CONSTRAINT `fk_mantenimiento_inventario_codigo` FOREIGN KEY (`codigo_equipo`) REFERENCES `inventario` (`codigo`) ON DELETE NO ACTION ON UPDATE CASCADE,
   CONSTRAINT `fk_mantenimiento_reporte_falla` FOREIGN KEY (`id_falla`) REFERENCES `reporte_fallas` (`id_falla`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

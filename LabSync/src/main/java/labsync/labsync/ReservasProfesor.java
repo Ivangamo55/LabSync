@@ -126,41 +126,23 @@ public class ReservasProfesor extends javax.swing.JFrame {
             javax.swing.JOptionPane.showMessageDialog(this, "La fecha de la reserva no puede estar en el pasado.", "Fecha no válida", javax.swing.JOptionPane.WARNING_MESSAGE);
             return false;
         }
-        if (fecha.equals(java.time.LocalDate.now())) {
-            String horario = cmbHorario.getSelectedItem().toString();
-            String horaInicio = horario.substring(0, horario.indexOf(" - "));
-            java.time.LocalTime inicio = java.time.LocalTime.parse(
-                    horaInicio, java.time.format.DateTimeFormatter.ofPattern("H:mm"));
-            if (!inicio.isAfter(java.time.LocalTime.now())) {
-                javax.swing.JOptionPane.showMessageDialog(this, "El horario seleccionado ya comenzó.", "Horario no válido", javax.swing.JOptionPane.WARNING_MESSAGE);
-                return false;
-            }
-        }
-        return true;
+        return ValidacionFechas.validarHorarioFuturo(
+                this, fecha, cmbHorario.getSelectedItem().toString());
     }
 
     private void consultarDisponibilidad() {
         if (!validarDatosBase()) return;
-        String sqlLaboratorio = "SELECT total_equipos FROM laboratorios WHERE nombre = ? AND estado = 'Disponible'";
-        String sqlOcupacion = "SELECT COUNT(*) total FROM reservas WHERE laboratorio = ? AND fecha = ? "
-                + "AND horario = ? AND estado IN ('Pendiente','Aprobada')";
         try (java.sql.Connection con = ConexionBD.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
-            try (java.sql.PreparedStatement ps = con.prepareStatement(sqlLaboratorio)) {
-                ps.setString(1, cmbLaboratorio.getSelectedItem().toString());
-                try (java.sql.ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) throw new java.sql.SQLException("El laboratorio ya no está disponible.");
-                    capacidadLaboratorio = rs.getInt("total_equipos");
-                }
-            }
-            try (java.sql.PreparedStatement ps = con.prepareStatement(sqlOcupacion)) {
-                ps.setString(1, cmbLaboratorio.getSelectedItem().toString());
-                ps.setDate(2, new java.sql.Date(dateFecha.getDate().getTime()));
-                ps.setString(3, cmbHorario.getSelectedItem().toString());
-                try (java.sql.ResultSet rs = ps.executeQuery()) {
-                    disponibilidadConfirmada = rs.next() && rs.getInt("total") == 0;
-                }
-            }
+            DisponibilidadService.ResultadoDisponibilidad resultado
+                    = new DisponibilidadService().consultarParaProfesor(
+                            con,
+                            cmbLaboratorio.getSelectedItem().toString(),
+                            new java.sql.Date(dateFecha.getDate().getTime()).toLocalDate(),
+                            cmbHorario.getSelectedItem().toString(),
+                            false);
+            capacidadLaboratorio = resultado.getCapacidad();
+            disponibilidadConfirmada = resultado.estaDisponible();
             lbEstadoDisponibilidad.setText(disponibilidadConfirmada ? "Disponibilidad: laboratorio disponible" : "Disponibilidad: horario ocupado");
             lbEstadoDisponibilidad.setForeground(disponibilidadConfirmada ? new java.awt.Color(8,173,141) : new java.awt.Color(220,53,69));
         } catch (java.sql.SQLException ex) {
@@ -191,24 +173,22 @@ public class ReservasProfesor extends javax.swing.JFrame {
             return;
         }
         String sql = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, laboratorio, actividad, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
-        String sqlOcupacion = "SELECT id_reserva FROM reservas WHERE laboratorio = ? AND fecha = ? "
-                + "AND horario = ? AND estado IN ('Pendiente','Aprobada') FOR UPDATE";
         try (java.sql.Connection con = ConexionBD.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             con.setAutoCommit(false);
             try {
-                try (java.sql.PreparedStatement bloqueo = con.prepareStatement(sqlOcupacion)) {
-                    bloqueo.setString(1, cmbLaboratorio.getSelectedItem().toString());
-                    bloqueo.setDate(2, new java.sql.Date(dateFecha.getDate().getTime()));
-                    bloqueo.setString(3, cmbHorario.getSelectedItem().toString());
-                    try (java.sql.ResultSet rs = bloqueo.executeQuery()) {
-                        if (rs.next()) {
-                            con.rollback();
-                            disponibilidadConfirmada = false;
-                            javax.swing.JOptionPane.showMessageDialog(this, "El horario acaba de ser ocupado. Consulta otra disponibilidad.", "Horario ocupado", javax.swing.JOptionPane.WARNING_MESSAGE);
-                            return;
-                        }
-                    }
+                DisponibilidadService.ResultadoDisponibilidad disponibilidad
+                        = new DisponibilidadService().consultarParaProfesor(
+                                con,
+                                cmbLaboratorio.getSelectedItem().toString(),
+                                new java.sql.Date(dateFecha.getDate().getTime()).toLocalDate(),
+                                cmbHorario.getSelectedItem().toString(),
+                                true);
+                if (!disponibilidad.estaDisponible()) {
+                    con.rollback();
+                    disponibilidadConfirmada = false;
+                    javax.swing.JOptionPane.showMessageDialog(this, disponibilidad.getMensaje(), "Horario ocupado", javax.swing.JOptionPane.WARNING_MESSAGE);
+                    return;
                 }
                 try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
                     ps.setInt(1, sesion.getId());

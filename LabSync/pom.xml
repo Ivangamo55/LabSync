@@ -29,7 +29,9 @@
     </dependencies>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>25</maven.compiler.release>
+        <!-- Java 17 is an LTS release commonly available in CI and browser
+             workspaces. The application does not require newer language APIs. -->
+        <maven.compiler.release>17</maven.compiler.release>
         <exec.mainClass>labsync.labsync.LabSync</exec.mainClass>
     </properties>
     <build>

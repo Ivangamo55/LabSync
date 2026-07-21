@@ -42,6 +42,23 @@ public final class ValidacionFechas {
         return false;
     }
 
+    public static boolean validarHorarioFuturo(
+            java.awt.Component padre, java.time.LocalDate fecha, String horario) {
+        if (!fecha.equals(java.time.LocalDate.now())) return true;
+
+        String horaInicio = horario.substring(0, horario.indexOf(" - "));
+        java.time.LocalTime inicio = java.time.LocalTime.parse(
+                horaInicio, java.time.format.DateTimeFormatter.ofPattern("H:mm"));
+        if (inicio.isAfter(java.time.LocalTime.now())) return true;
+
+        javax.swing.JOptionPane.showMessageDialog(
+                padre,
+                "No puedes reservar este horario porque su hora de inicio ya pasó.",
+                "Horario no válido",
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+        return false;
+    }
+
     private static final class EvaluadorFinDeSemana implements com.toedter.calendar.IDateEvaluator {
         @Override public boolean isSpecial(java.util.Date date) { return false; }
         @Override public java.awt.Color getSpecialForegroundColor() { return null; }

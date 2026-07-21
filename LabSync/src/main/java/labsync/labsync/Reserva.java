@@ -387,14 +387,27 @@ public class Reserva extends javax.swing.JFrame {
         String sql = "UPDATE reservas SET estado = ? WHERE id_reserva = ?";
         
         try {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            
-            ps.setString(1, nuevoEstado);
-            ps.setInt(2, idReserva);
-            
-            int filas = ps.executeUpdate();
+            con.setAutoCommit(false);
+            if ("Aprobada".equals(nuevoEstado)) {
+                DisponibilidadService.ResultadoDisponibilidad disponibilidad
+                        = new DisponibilidadService().validarAprobacion(con, idReserva, true);
+                if (!disponibilidad.estaDisponible()) {
+                    con.rollback();
+                    javax.swing.JOptionPane.showMessageDialog(this,
+                            disponibilidad.getMensaje(), "Reserva no disponible",
+                            javax.swing.JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+            }
+            int filas;
+            try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
+                ps.setString(1, nuevoEstado);
+                ps.setInt(2, idReserva);
+                filas = ps.executeUpdate();
+            }
             
             if (filas > 0) {
+                con.commit();
                 javax.swing.JOptionPane.showMessageDialog(
                     this,
                     "Reserva actualizada correctamente.",
@@ -403,6 +416,7 @@ public class Reserva extends javax.swing.JFrame {
                 );
                 cargarTablaReservasFiltrada();
             } else {
+                con.rollback();
                 javax.swing.JOptionPane.showMessageDialog(
                     this,
                     "No se encontró la reserva seleccionada.",
@@ -411,6 +425,12 @@ public class Reserva extends javax.swing.JFrame {
                 );
             }
         } catch (java.sql.SQLException e) {
+            try {
+                con.rollback();
+            } catch (java.sql.SQLException rollbackError) {
+                logger.log(java.util.logging.Level.WARNING,
+                        "No se pudo revertir la actualización de reserva.", rollbackError);
+            }
             javax.swing.JOptionPane.showMessageDialog(
                 this,
                 "Error al actualizar la reserva: " + e.getMessage(),
