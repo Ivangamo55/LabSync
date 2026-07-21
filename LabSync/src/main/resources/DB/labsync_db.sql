@@ -152,6 +152,43 @@ INSERT INTO `inventario` VALUES
 UNLOCK TABLES;
 
 --
+-- Table structure for table `laboratorios`
+--
+
+DROP TABLE IF EXISTS `laboratorios`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `laboratorios` (
+  `id_laboratorio` int NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(20) NOT NULL,
+  `total_equipos` int NOT NULL,
+  `estado` varchar(30) NOT NULL DEFAULT 'Disponible',
+  PRIMARY KEY (`id_laboratorio`),
+  UNIQUE KEY `nombre` (`nombre`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `laboratorios`
+--
+
+LOCK TABLES `laboratorios` WRITE;
+/*!40000 ALTER TABLE `laboratorios` DISABLE KEYS */;
+INSERT INTO `laboratorios` (`nombre`, `total_equipos`, `estado`) VALUES
+('PB-05',20,'Disponible'),
+('M-11',20,'Disponible'),
+('M-12',20,'Disponible'),
+('M-13',20,'Disponible'),
+('M-14',20,'Disponible'),
+('M-19',20,'Disponible'),
+('M-02',30,'Disponible'),
+('M-05',20,'Disponible'),
+('5-06',20,'Disponible'),
+('5-03',20,'Disponible');
+/*!40000 ALTER TABLE `laboratorios` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `laboratorista`
 --
 

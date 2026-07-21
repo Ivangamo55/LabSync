@@ -419,7 +419,7 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="46" green="46" red="46" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="Reportes enviados"/>
+                <Property name="text" type="java.lang.String" value="Reportes pendientes"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
@@ -622,7 +622,7 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="8d" green="ad" red="8" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="Avisos"/>
+                <Property name="text" type="java.lang.String" value="Gu&#xed;a del alumno"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
@@ -638,7 +638,7 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="46" green="46" red="46" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="Llega a tiempo"/>
+                <Property name="text" type="java.lang.String" value="Solicita tu reserva"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
@@ -654,18 +654,18 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="5a" green="5a" red="5a" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="&lt;html&gt;S&#xe9; puntual para aprovechar al m&#xe1;ximo tu reservaci&#xf3;n.&lt;/html&gt;"/>
+                <Property name="text" type="java.lang.String" value="&lt;html&gt;Selecciona fecha, horario, laboratorio y actividad. La solicitud se guarda como Pendiente.&lt;/html&gt;"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
-                  <AbsoluteConstraints x="30" y="92" width="245" height="35"/>
+                  <AbsoluteConstraints x="30" y="92" width="245" height="45"/>
                 </Constraint>
               </Constraints>
             </Component>
             <Component class="javax.swing.JSeparator" name="separadorAviso1">
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
-                  <AbsoluteConstraints x="30" y="140" width="245" height="10"/>
+                  <AbsoluteConstraints x="30" y="145" width="245" height="10"/>
                 </Constraint>
               </Constraints>
             </Component>
@@ -677,7 +677,7 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="46" green="46" red="46" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="Cuida el laboratorio"/>
+                <Property name="text" type="java.lang.String" value="Consulta el estado"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
@@ -693,18 +693,18 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="5a" green="5a" red="5a" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="&lt;html&gt;Respeta las normas y mant&#xe9;n el espacio limpio.&lt;/html&gt;"/>
+                <Property name="text" type="java.lang.String" value="&lt;html&gt;Revisa si tu reserva est&#xe1; Pendiente, Aprobada, Rechazada, Cancelada o Finalizada.&lt;/html&gt;"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
-                  <AbsoluteConstraints x="30" y="177" width="245" height="35"/>
+                  <AbsoluteConstraints x="30" y="177" width="245" height="48"/>
                 </Constraint>
               </Constraints>
             </Component>
             <Component class="javax.swing.JSeparator" name="separadorAviso2">
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
-                  <AbsoluteConstraints x="30" y="225" width="245" height="10"/>
+                  <AbsoluteConstraints x="30" y="232" width="245" height="10"/>
                 </Constraint>
               </Constraints>
             </Component>
@@ -716,11 +716,11 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="46" green="46" red="46" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="Reporta cualquier falla"/>
+                <Property name="text" type="java.lang.String" value="Reporta una falla"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
-                  <AbsoluteConstraints x="30" y="240" width="240" height="20"/>
+                  <AbsoluteConstraints x="30" y="245" width="240" height="20"/>
                 </Constraint>
               </Constraints>
             </Component>
@@ -732,11 +732,11 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="5a" green="5a" red="5a" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="&lt;html&gt;Tu reporte ayuda a mantener los laboratorios en buen estado.&lt;/html&gt;"/>
+                <Property name="text" type="java.lang.String" value="&lt;html&gt;Indica laboratorio, c&#xf3;digo del equipo, fecha, tipo y descripci&#xf3;n para facilitar su seguimiento.&lt;/html&gt;"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
-                  <AbsoluteConstraints x="30" y="262" width="245" height="45"/>
+                  <AbsoluteConstraints x="30" y="267" width="245" height="55"/>
                 </Constraint>
               </Constraints>
             </Component>

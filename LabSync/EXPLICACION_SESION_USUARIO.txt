@@ -1,0 +1,110 @@
+EXPLICACION DE SESIONUSUARIO.JAVA
+=================================
+
+La base de datos sigue siendo la fuente oficial de la informacion de los
+usuarios. SesionUsuario.java no reemplaza la base de datos y tampoco funciona
+como una segunda base de datos.
+
+Su funcion es conservar temporalmente la identidad del usuario que inicio
+sesion mientras la aplicacion esta abierta.
+
+
+FLUJO DE FUNCIONAMIENTO
+-----------------------
+
+1. El usuario escribe su correo y contraseña en la pantalla de inicio de
+   sesion.
+
+2. Login.java consulta la tabla usuario de la base de datos.
+
+3. Si las credenciales son correctas, la base de datos devuelve:
+
+   - El ID unico del usuario.
+   - Su nombre.
+   - Su nombre completo.
+   - Su rol.
+
+4. Login.java crea un objeto SesionUsuario con esos datos.
+
+5. El mismo objeto se pasa entre las diferentes ventanas de Profesor.
+
+6. Cada ventana utiliza principalmente el ID para consultar o guardar
+   informacion en la base de datos.
+
+El flujo se puede resumir asi:
+
+Login consulta la BD -> obtiene el ID -> SesionUsuario conserva el ID
+-> las pantallas consultan la BD utilizando ese ID
+
+
+POR QUE ES NECESARIO CONSERVAR EL ID
+------------------------------------
+
+El nombre de una persona no es necesariamente unico. Pueden existir dos
+profesores con el mismo nombre o con nombres parecidos.
+
+Si las pantallas buscaran las reservas o los reportes solamente por nombre,
+podrian mostrar, cancelar o modificar los registros de otra persona.
+
+El ID de la tabla usuario si identifica de manera unica a cada usuario. Por
+eso SesionUsuario conserva ese ID durante toda la navegacion.
+
+
+QUE INFORMACION CONSERVA
+------------------------
+
+SesionUsuario mantiene temporalmente:
+
+- ID del usuario en la base de datos.
+- Nombre utilizado en la interfaz.
+- Nombre completo.
+- Rol del usuario, por ejemplo Profesor.
+
+No guarda la contraseña del usuario.
+
+
+QUE INFORMACION SIGUE EN LA BASE DE DATOS
+-----------------------------------------
+
+Las reservas, reportes de fallas, usuarios, laboratorios, bitacoras y demas
+registros siguen almacenados en MySQL.
+
+Las pantallas continúan utilizando ConexionBD para leer y guardar esa
+informacion. SesionUsuario solamente indica cual usuario autenticado esta
+realizando cada operacion.
+
+
+DURACION DE LA SESION
+---------------------
+
+SesionUsuario existe solamente en la memoria del programa. Cuando se cierra
+la sesion o termina la aplicacion, el objeto desaparece.
+
+No crea tablas, no modifica el esquema de la base de datos y no almacena una
+copia permanente de los usuarios.
+
+
+SE PODRIA UTILIZAR SOLAMENTE LA BASE DE DATOS
+---------------------------------------------
+
+Si. Otra opcion seria pasar solamente el numero de ID entre las ventanas y
+volver a consultar el nombre y el rol en la base de datos cada vez que se abre
+una pantalla.
+
+Sin embargo, seguiria siendo necesario conservar temporalmente el ID del
+usuario autenticado. Eso tambien seria una sesion, pero estaria implementada
+de forma menos organizada y provocaria consultas repetidas.
+
+SesionUsuario centraliza ese proceso, reduce consultas innecesarias y evita
+que cada pantalla implemente su propia forma de identificar al usuario.
+
+
+CONCLUSION
+----------
+
+La base de datos almacena la informacion permanente.
+
+SesionUsuario conserva temporalmente la identidad de la persona autenticada
+para que todas las ventanas trabajen con el usuario correcto.
+
+Por lo tanto, SesionUsuario complementa a la base de datos; no la reemplaza.

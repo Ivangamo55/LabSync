@@ -1,6 +1,24 @@
+
 package labsync.labsync;
 
 import java.awt.Color;
+        
+import java.io.File;
+import java.io.FileOutputStream;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
+
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class Inventario extends javax.swing.JFrame {
     
@@ -10,10 +28,16 @@ public class Inventario extends javax.swing.JFrame {
     private String codigoOriginal = "";
     private final Color COLOR_PLACEHOLDER = new Color(150, 150, 150);
     private final Color COLOR_TEXTO = new Color(51, 51, 51);
-    private final String PH_BUSCAR = "Código, nombre, marca o No. serie";
+    private final String PH_BUSCAR = "Código, marca, modelo o No. serie";   
+
+    private void cargarLaboratoriosDesdeBD() {
+        LaboratoriosBD.cargarDisponibles(cmbLaboratorioModal, "Selecciona");
+        LaboratoriosBD.cargarTodos(laboratorio, "Todos");
+    }
     
     public Inventario(String nombreRecibido) {
         initComponents();
+        cargarLaboratoriosDesdeBD();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
        
         this.nombreUsuario = nombreRecibido;
@@ -21,6 +45,7 @@ public class Inventario extends javax.swing.JFrame {
         txtObservaciones.setLineWrap(true);
         txtObservaciones.setWrapStyleWord(true);
         
+        ocultarCampoNombreEquipo();
         ponerPlaceholderBuscar();
         cargarTablaInventario();
         cargarTablaInventarioFiltrada();
@@ -28,13 +53,76 @@ public class Inventario extends javax.swing.JFrame {
 
     public Inventario() {
         initComponents();
+        cargarLaboratoriosDesdeBD();
         
         txtObservaciones.setLineWrap(true);
         txtObservaciones.setWrapStyleWord(true);
         
+        ocultarCampoNombreEquipo();
         ponerPlaceholderBuscar();
         cargarTablaInventario();
         cargarTablaInventarioFiltrada();
+    }
+    
+    private void ocultarCampoNombreEquipo() {
+        // Evita que AbsoluteLayout restaure las posiciones del GUI Builder
+        bodyModal.setLayout(null);
+
+        lbNombreEquipo.setVisible(false);
+        txtNombreEquipo.setVisible(false);
+        txtNombreEquipo.setText("N/A");
+
+        // Título y línea
+        lbTituloModal.setBounds(30, 25, 300, 30);
+        linea.setBounds(30, 65, 500, 3);
+
+        // Primera fila
+        lbCodigo.setBounds(30, 90, 220, 22);
+        txtCodigo.setBounds(30, 120, 220, 24);
+
+        lbTipoDispositivoModal.setBounds(310, 90, 220, 22);
+        cmbTipoDispositivoModal.setBounds(310, 120, 220, 24);
+
+        // Segunda fila
+        lbMarca.setBounds(30, 165, 220, 22);
+        txtMarca.setBounds(30, 195, 220, 24);
+
+        lbModelo.setBounds(310, 165, 220, 22);
+        txtModelo.setBounds(310, 195, 220, 24);
+
+        // Tercera fila
+        lbNoSerie.setBounds(30, 240, 220, 22);
+        txtNoSerie.setBounds(30, 270, 220, 24);
+
+        lbLaboratorioModal.setBounds(310, 240, 220, 22);
+        cmbLaboratorioModal.setBounds(310, 270, 220, 24);
+
+        // Parte inferior
+        lbOberservaciones.setBounds(310, 315, 220, 22);
+        jScrollPane3.setBounds(310, 345, 220, 120);
+
+        btnGuardar.setBounds(50, 345, 160, 40);
+        btnCancelar.setBounds(50, 405, 160, 40);
+
+        // Tamaño interno del modal
+        bodyModal.setPreferredSize(new java.awt.Dimension(567, 500));
+        bodyModal.setMinimumSize(new java.awt.Dimension(567, 500));
+        bodyModal.setSize(567, 500);
+
+        bodyModal.revalidate();
+        bodyModal.repaint();
+    }
+    
+    private void ocultarColumnaNombreEquipo() {
+        if (tablaInventario.getColumnModel().getColumnCount() > 1) {
+            javax.swing.table.TableColumn columnaNombre
+                    = tablaInventario.getColumnModel().getColumn(1);
+
+            columnaNombre.setMinWidth(0);
+            columnaNombre.setMaxWidth(0);
+            columnaNombre.setPreferredWidth(0);
+            columnaNombre.setWidth(0);
+        }
     }
     
     private void ponerPlaceholderBuscar() {
@@ -62,7 +150,7 @@ public class Inventario extends javax.swing.JFrame {
     
     private void limpiarCamposEquipo() {
         txtCodigo.setText("");
-        txtNombreEquipo.setText("");
+        txtNombreEquipo.setText("N/A");
         txtMarca.setText("");
         txtModelo.setText("");
         txtNoSerie.setText("");
@@ -85,79 +173,94 @@ public class Inventario extends javax.swing.JFrame {
     
     private boolean validarCamposEquipo() {
         String codigo = txtCodigo.getText().trim();
-        String nombreEquipo = txtNombreEquipo.getText().trim();
         String marca = txtMarca.getText().trim();
         String modelo = txtModelo.getText().trim();
         String noSerie = txtNoSerie.getText().trim();
-        
+
         if (codigo.isEmpty()) {
-            mostrarErrorValidacion("Ingresa el código del equipo", txtCodigo);
+            mostrarErrorValidacion(
+                "Ingresa el código del equipo.",
+                txtCodigo
+            );
             return false;
         }
-        
-        if (nombreEquipo.isEmpty()) {
-            mostrarErrorValidacion("Ingresa el nombre del equipo", txtNombreEquipo);
-            return false;
-        }
-        
+
         if (cmbTipoDispositivoModal.getSelectedIndex() == 0) {
-            mostrarErrorValidacion("Selecciona el tipo de dispositivo", cmbTipoDispositivoModal);
+            mostrarErrorValidacion(
+                "Selecciona el tipo de dispositivo.",
+                cmbTipoDispositivoModal
+            );
             return false;
         }
-        
+
         if (marca.isEmpty()) {
-            mostrarErrorValidacion("Ingresa la marca del equipo.", txtMarca);
+            mostrarErrorValidacion(
+                "Ingresa la marca del equipo.",
+                txtMarca
+            );
             return false;
         }
 
         if (modelo.isEmpty()) {
-            mostrarErrorValidacion("Ingresa el modelo del equipo.", txtModelo);
+            mostrarErrorValidacion(
+                "Ingresa el modelo del equipo.",
+                txtModelo
+            );
             return false;
         }
 
         if (noSerie.isEmpty()) {
-            mostrarErrorValidacion("Ingresa el número de serie del equipo.", txtNoSerie);
+            mostrarErrorValidacion(
+                "Ingresa el número de serie del equipo.",
+                txtNoSerie
+            );
             return false;
         }
 
         if (cmbLaboratorioModal.getSelectedIndex() == 0) {
-            mostrarErrorValidacion("Selecciona el laboratorio asignado.", cmbLaboratorioModal);
+            mostrarErrorValidacion(
+                "Selecciona el laboratorio asignado.",
+                cmbLaboratorioModal
+            );
             return false;
         }
-        
+
         return true;
     }
     
     private boolean guardarEquipoBD() {
         String codigo = txtCodigo.getText().trim();
-        String nombreEquipo = txtNombreEquipo.getText().trim();
-        String tipoDispositivo = cmbTipoDispositivoModal.getSelectedItem().toString();
+        String nombreEquipo = "N/A";
+        String tipoDispositivo
+                = cmbTipoDispositivoModal.getSelectedItem().toString();
         String marca = txtMarca.getText().trim();
         String modelo = txtModelo.getText().trim();
         String noSerie = txtNoSerie.getText().trim();
-        String laboratorioSeleccionado = cmbLaboratorioModal.getSelectedItem().toString();
+        String laboratorioSeleccionado
+                = cmbLaboratorioModal.getSelectedItem().toString();
         String estadoEquipo = "Disponible";
         String observaciones = txtObservaciones.getText().trim();
-        
+
         java.sql.Connection con = ConexionBD.conectar();
-        
+
         if (con == null) {
             javax.swing.JOptionPane.showMessageDialog(
                 addEquipo,
-                "No hay conexión con la base de datos",
+                "No hay conexión con la base de datos.",
                 "Error de conexión",
                 javax.swing.JOptionPane.ERROR_MESSAGE
             );
             return false;
         }
-        
+
         String sql = "INSERT INTO inventario "
-            + "(codigo, nombre_equipo, tipo_dispositivo, marca, modelo, no_serie, laboratorio, estado, observaciones) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        
+                + "(codigo, nombre_equipo, tipo_dispositivo, marca, modelo, "
+                + "no_serie, laboratorio, estado, observaciones) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
         try {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            
+
             ps.setString(1, codigo);
             ps.setString(2, nombreEquipo);
             ps.setString(3, tipoDispositivo);
@@ -167,10 +270,11 @@ public class Inventario extends javax.swing.JFrame {
             ps.setString(7, laboratorioSeleccionado);
             ps.setString(8, estadoEquipo);
             ps.setString(9, observaciones);
-            
+
             int filas = ps.executeUpdate();
-            
+
             return filas > 0;
+
         } catch (java.sql.SQLException e) {
             javax.swing.JOptionPane.showMessageDialog(
                 addEquipo,
@@ -179,51 +283,58 @@ public class Inventario extends javax.swing.JFrame {
                 javax.swing.JOptionPane.ERROR_MESSAGE
             );
             return false;
+
         } finally {
             try {
                 con.close();
             } catch (java.sql.SQLException ex) {
-                
+                logger.log(
+                    java.util.logging.Level.WARNING,
+                    "No se pudo cerrar la conexión.",
+                    ex
+                );
             }
         }
     }
     
     private boolean actualizarEquipoBD() {
         String codigo = txtCodigo.getText().trim();
-        String nombreEquipo = txtNombreEquipo.getText().trim();
-        String tipoDispositivo = cmbTipoDispositivoModal.getSelectedItem().toString();
+        String nombreEquipo = "N/A";
+        String tipoDispositivo
+                = cmbTipoDispositivoModal.getSelectedItem().toString();
         String marca = txtMarca.getText().trim();
         String modelo = txtModelo.getText().trim();
         String noSerie = txtNoSerie.getText().trim();
-        String laboratorioSeleccionado = cmbLaboratorioModal.getSelectedItem().toString();
+        String laboratorioSeleccionado
+                = cmbLaboratorioModal.getSelectedItem().toString();
         String observaciones = txtObservaciones.getText().trim();
-        
+
         java.sql.Connection con = ConexionBD.conectar();
-        
+
         if (con == null) {
             javax.swing.JOptionPane.showMessageDialog(
-            addEquipo,
+                addEquipo,
                 "No hay conexión con la base de datos.",
                 "Error de conexión",
                 javax.swing.JOptionPane.ERROR_MESSAGE
             );
             return false;
         }
-        
+
         String sql = "UPDATE inventario SET "
-            + "codigo = ?, "
-            + "nombre_equipo = ?, "
-            + "tipo_dispositivo = ?, "
-            + "marca = ?, "
-            + "modelo = ?, "
-            + "no_serie = ?, "
-            + "laboratorio = ?, "
-            + "observaciones = ? "
-            + "WHERE codigo = ?";
-        
+                + "codigo = ?, "
+                + "nombre_equipo = ?, "
+                + "tipo_dispositivo = ?, "
+                + "marca = ?, "
+                + "modelo = ?, "
+                + "no_serie = ?, "
+                + "laboratorio = ?, "
+                + "observaciones = ? "
+                + "WHERE codigo = ?";
+
         try {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            
+
             ps.setString(1, codigo);
             ps.setString(2, nombreEquipo);
             ps.setString(3, tipoDispositivo);
@@ -233,10 +344,11 @@ public class Inventario extends javax.swing.JFrame {
             ps.setString(7, laboratorioSeleccionado);
             ps.setString(8, observaciones);
             ps.setString(9, codigoOriginal);
-            
+
             int filas = ps.executeUpdate();
-            
+
             return filas > 0;
+
         } catch (java.sql.SQLException e) {
             javax.swing.JOptionPane.showMessageDialog(
                 addEquipo,
@@ -245,11 +357,16 @@ public class Inventario extends javax.swing.JFrame {
                 javax.swing.JOptionPane.ERROR_MESSAGE
             );
             return false;
+
         } finally {
             try {
                 con.close();
             } catch (java.sql.SQLException ex) {
-                
+                logger.log(
+                    java.util.logging.Level.WARNING,
+                    "No se pudo cerrar la conexión.",
+                    ex
+                );
             }
         }
     }
@@ -261,6 +378,8 @@ public class Inventario extends javax.swing.JFrame {
             "Campo obligatorio",
             javax.swing.JOptionPane.WARNING_MESSAGE
         );
+
+        componente.requestFocusInWindow();
     }
     
     private void cargarTablaInventario() {
@@ -278,6 +397,7 @@ public class Inventario extends javax.swing.JFrame {
         modelo.addColumn("Observaciones");
         
         tablaInventario.setModel(modelo);
+        ocultarColumnaNombreEquipo();   
         
         String sql = "SELECT codigo, nombre_equipo, tipo_dispositivo, marca, modelo, "
             + "no_serie, laboratorio, estado, "
@@ -348,10 +468,6 @@ public class Inventario extends javax.swing.JFrame {
         modelo.addColumn("Último Mantenimiento");
         modelo.addColumn("Observaciones");
         
-        // Instalar el modelo vacio de inmediato para que nunca permanezcan
-        // visibles filas pertenecientes a una busqueda anterior.
-        tablaInventario.setModel(modelo);
-
         String textoBusqueda = txtBuscar.getText().trim();
 
         if (textoBusqueda.equals(PH_BUSCAR)) {
@@ -371,14 +487,14 @@ public class Inventario extends javax.swing.JFrame {
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
         if (!textoBusqueda.isEmpty()) {
-            sql += "AND (codigo LIKE ? OR nombre_equipo LIKE ? OR tipo_dispositivo LIKE ? "
-                + "OR marca LIKE ? OR modelo LIKE ? OR no_serie LIKE ? OR laboratorio LIKE ? "
-                + "OR estado LIKE ? OR DATE_FORMAT(ultimo_mantenimiento, '%d/%m/%Y') LIKE ? "
-                + "OR observaciones LIKE ?) ";
+            sql += "AND (codigo LIKE ? OR marca LIKE ? OR modelo LIKE ? OR no_serie LIKE ?) ";
+
             String busqueda = "%" + textoBusqueda + "%";
-            for (int i = 0; i < 10; i++) {
-                parametros.add(busqueda);
-            }
+
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
         }
         
         if (!laboratorioSeleccionado.equals("Todos") && !laboratorioSeleccionado.startsWith("Item")) {
@@ -395,8 +511,6 @@ public class Inventario extends javax.swing.JFrame {
             sql += "AND tipo_dispositivo = ? ";
             parametros.add(dispositivoSeleccionado);
         }
-
-        sql += "ORDER BY id_inventario DESC";
         
         java.sql.Connection con = ConexionBD.conectar();
         
@@ -436,6 +550,8 @@ public class Inventario extends javax.swing.JFrame {
                 modelo.addRow(fila);
             }
             
+            tablaInventario.setModel(modelo);
+            ocultarColumnaNombreEquipo();
         } catch (java.sql.SQLException e) {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
@@ -500,91 +616,238 @@ public class Inventario extends javax.swing.JFrame {
         }
     }
     
-    private void exportarTablaInventarioCSV() {
-        if (tablaInventario.getRowCount() == 0) {
+    private void exportarTablaInventarioExcel() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Guardar inventario");
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Archivo Excel (*.xlsx)", "xlsx"));
+        fileChooser.setSelectedFile(new File("inventario_labsync.xlsx"));
+
+        int seleccion = fileChooser.showSaveDialog(this);
+
+        if (seleccion != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File archivo = fileChooser.getSelectedFile();
+
+        if (!archivo.getName().toLowerCase().endsWith(".xlsx")) {
+            archivo = new File(archivo.getAbsolutePath() + ".xlsx");
+        }
+
+        String textoBusqueda = txtBuscar.getText().trim();
+
+        if (textoBusqueda.equals(PH_BUSCAR)) {
+            textoBusqueda = "";
+        }
+
+        String laboratorioSeleccionado = laboratorio.getSelectedItem().toString();
+        String estadoSeleccionado = estado.getSelectedItem().toString();
+        String dispositivoSeleccionado = dispositivo.getSelectedItem().toString();
+
+        String sql = "SELECT "
+            + "codigo, "
+            + "nombre_equipo, "
+            + "tipo_dispositivo, "
+            + "marca, "
+            + "modelo, "
+            + "no_serie, "
+            + "laboratorio, "
+            + "estado, "
+            + "IFNULL(DATE_FORMAT(ultimo_mantenimiento, '%d/%m/%Y'), 'Sin registro') AS ultimo_mantenimiento, "
+            + "IFNULL(observaciones, '') AS observaciones "
+            + "FROM inventario "
+            + "WHERE 1=1 ";
+
+        java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
+
+        if (!textoBusqueda.isEmpty()) {
+            sql += "AND (codigo LIKE ? "
+                + "OR nombre_equipo LIKE ? "
+                + "OR marca LIKE ? "
+                + "OR modelo LIKE ? "
+                + "OR no_serie LIKE ?) ";
+
+            String busqueda = "%" + textoBusqueda + "%";
+
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+        }
+
+        if (!laboratorioSeleccionado.equals("Todos") && !laboratorioSeleccionado.startsWith("Item")) {
+            sql += "AND laboratorio = ? ";
+            parametros.add(laboratorioSeleccionado);
+        }
+
+        if (!estadoSeleccionado.equals("Todos")) {
+            sql += "AND estado = ? ";
+            parametros.add(estadoSeleccionado);
+        }
+
+        if (!dispositivoSeleccionado.equals("Todos")) {
+            sql += "AND tipo_dispositivo = ? ";
+            parametros.add(dispositivoSeleccionado);
+        }
+
+        sql += "ORDER BY id_inventario DESC";
+
+        java.sql.Connection con = ConexionBD.conectar();
+
+        if (con == null) {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
-                "No hay datos en la tabla para exportar.",
-                "Tabla vacía",
-                javax.swing.JOptionPane.WARNING_MESSAGE 
+                "No hay conexi\u00F3n con la base de datos.",
+                "Error de conexi\u00F3n",
+                javax.swing.JOptionPane.ERROR_MESSAGE
             );
             return;
         }
-        
-        javax.swing.JFileChooser fileChooser = new javax.swing.JFileChooser();
-        fileChooser.setDialogTitle("Guardar inventario");
-        
-        javax.swing.filechooser.FileNameExtensionFilter filtro = 
-                new javax.swing.filechooser.FileNameExtensionFilter("Archivo CSV (*.csv)", ("csv"));
-        
-        fileChooser.setFileFilter(filtro);
-        fileChooser.setSelectedFile(new java.io.File("inventario_labsync.csv"));
-        
-        int opcion = fileChooser.showSaveDialog(this);
-        
-        if (opcion != javax.swing.JFileChooser.APPROVE_OPTION) {
-            return;
-        }
-        
-        java.io.File archivo = fileChooser.getSelectedFile();
-        
-        if (!archivo.getName().toLowerCase().endsWith(".csv")) {
-            archivo = new java.io.File(archivo.getAbsolutePath() + ".csv");
-        }
-        
-        try {
-            java.io.FileWriter fw = new java.io.FileWriter(archivo);
-            
-            javax.swing.table.TableModel modelo = tablaInventario.getModel();
-            
-            // ENCABEZADOS
-            for (int i = 0; i < modelo.getColumnCount(); i++) {
-                fw.write(modelo.getColumnName(i));
-                
-                if (i < modelo.getColumnCount() - 1) {
-                    fw.write(",");
-                }
+
+        try (
+            Workbook workbook = new XSSFWorkbook();
+            FileOutputStream salida = new FileOutputStream(archivo)
+        ) {
+            Sheet hoja = workbook.createSheet("Inventario");
+
+            CellStyle estiloTitulo = workbook.createCellStyle();
+            Font fuenteTitulo = workbook.createFont();
+            fuenteTitulo.setBold(true);
+            fuenteTitulo.setFontHeightInPoints((short) 16);
+            estiloTitulo.setFont(fuenteTitulo);
+            estiloTitulo.setAlignment(HorizontalAlignment.CENTER);
+
+            CellStyle estiloEncabezado = workbook.createCellStyle();
+            Font fuenteEncabezado = workbook.createFont();
+            fuenteEncabezado.setBold(true);
+            fuenteEncabezado.setColor(IndexedColors.WHITE.getIndex());
+            estiloEncabezado.setFont(fuenteEncabezado);
+            estiloEncabezado.setFillForegroundColor(IndexedColors.GREEN.getIndex());
+            estiloEncabezado.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            estiloEncabezado.setAlignment(HorizontalAlignment.CENTER);
+            estiloEncabezado.setBorderTop(BorderStyle.THIN);
+            estiloEncabezado.setBorderBottom(BorderStyle.THIN);
+            estiloEncabezado.setBorderLeft(BorderStyle.THIN);
+            estiloEncabezado.setBorderRight(BorderStyle.THIN);
+
+            CellStyle estiloCelda = workbook.createCellStyle();
+            estiloCelda.setBorderTop(BorderStyle.THIN);
+            estiloCelda.setBorderBottom(BorderStyle.THIN);
+            estiloCelda.setBorderLeft(BorderStyle.THIN);
+            estiloCelda.setBorderRight(BorderStyle.THIN);
+
+            Row filaTitulo = hoja.createRow(0);
+            Cell celdaTitulo = filaTitulo.createCell(0);
+            celdaTitulo.setCellValue("Reporte de Inventario - LabSync");
+            celdaTitulo.setCellStyle(estiloTitulo);
+
+            hoja.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 9));
+
+            Row filaEncabezado = hoja.createRow(2);
+
+            String[] encabezados = {
+                "C\u00F3digo",
+                "Nombre Equipo",
+                "Tipo de Dispositivo",
+                "Marca",
+                "Modelo",
+                "No. Serie",
+                "Laboratorio",
+                "Estado",
+                "\u00DAltimo Mantenimiento",
+                "Observaciones"
+            };
+
+            for (int i = 0; i < encabezados.length; i++) {
+                Cell celda = filaEncabezado.createCell(i);
+                celda.setCellValue(encabezados[i]);
+                celda.setCellStyle(estiloEncabezado);
             }
-            
-            fw.write("\n");
-            
-            // FILAS
-            for (int fila = 0; fila < modelo.getRowCount(); fila++) {
-                for (int columna = 0; columna < modelo.getColumnCount(); columna++) {
-                    Object valor =  modelo.getValueAt(fila, columna);
-                    
-                    String texto = valor == null ? "" : valor.toString();
-                    
-                    texto = texto.replace("\"", "\"\"");
-                    fw.write("\"" + texto + "\"");
-                    
-                    if (columna < modelo.getColumnCount() - 1) {
-                        fw.write(",");
-                    }
-                }
-                
-                fw.write("\n");
+
+            java.sql.PreparedStatement ps = con.prepareStatement(sql);
+
+            for (int i = 0; i < parametros.size(); i++) {
+                ps.setString(i + 1, parametros.get(i));
             }
-            
-            fw.close();
-            
+
+            java.sql.ResultSet rs = ps.executeQuery();
+
+            int filaExcel = 3;
+            int totalRegistros = 0;
+
+            while (rs.next()) {
+                Row fila = hoja.createRow(filaExcel);
+
+                Object[] datos = {
+                    rs.getString("codigo"),
+                    rs.getString("nombre_equipo"),
+                    rs.getString("tipo_dispositivo"),
+                    rs.getString("marca"),
+                    rs.getString("modelo"),
+                    rs.getString("no_serie"),
+                    rs.getString("laboratorio"),
+                    rs.getString("estado"),
+                    rs.getString("ultimo_mantenimiento"),
+                    rs.getString("observaciones")
+                };
+
+                for (int col = 0; col < datos.length; col++) {
+                    Cell celda = fila.createCell(col);
+                    celda.setCellValue(datos[col] != null ? datos[col].toString() : "");
+                    celda.setCellStyle(estiloCelda);
+                }
+
+                filaExcel++;
+                totalRegistros++;
+            }
+
+            if (totalRegistros == 0) {
+                javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "No hay datos para exportar con los filtros actuales.",
+                    "Sin datos",
+                    javax.swing.JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
+
+            hoja.createFreezePane(0, 3);
+            hoja.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(2, filaExcel - 1, 0, encabezados.length - 1));
+
+            for (int col = 0; col < encabezados.length; col++) {
+                hoja.autoSizeColumn(col);
+            }
+
+            workbook.write(salida);
+
             javax.swing.JOptionPane.showMessageDialog(
                 this,
-                "Inventario exportado correctamente.",
-                "Exportación exitosa",
+                "El inventario se export\u00F3 correctamente.",
+                "Exportaci\u00F3n exitosa",
                 javax.swing.JOptionPane.INFORMATION_MESSAGE
             );
-        } catch (java.io.IOException e) {
+
+        } catch (Exception e) {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
                 "Error al exportar inventario: " + e.getMessage(),
                 "Error",
                 javax.swing.JOptionPane.ERROR_MESSAGE
             );
+        } finally {
+            try {
+                con.close();
+            } catch (java.sql.SQLException ex) {
+            }
         }
     }
     
-    private void actualizarMantenimientosDelEquipo(String codigoAnterior, String nuevoCodigo, String nuevoNombreEquipo, String nuevoLaboratorio) {
+    private void actualizarMantenimientosDelEquipo(
+        String codigoAnterior,
+        String nuevoCodigo,
+        String nuevoLaboratorio
+    ) {
         java.sql.Connection con = ConexionBD.conectar();
 
         if (con == null) {
@@ -599,7 +862,7 @@ public class Inventario extends javax.swing.JFrame {
 
         String sql = "UPDATE mantenimiento SET "
                 + "codigo_equipo = ?, "
-                + "nombre_equipo = ?, "
+                + "nombre_equipo = 'N/A', "
                 + "laboratorio = ? "
                 + "WHERE codigo_equipo = ? "
                 + "AND estado IN ('Pendiente', 'En proceso')";
@@ -608,25 +871,77 @@ public class Inventario extends javax.swing.JFrame {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
 
             ps.setString(1, nuevoCodigo);
-            ps.setString(2, nuevoNombreEquipo);
-            ps.setString(3, nuevoLaboratorio);
-            ps.setString(4, codigoAnterior);
+            ps.setString(2, nuevoLaboratorio);
+            ps.setString(3, codigoAnterior);
 
             ps.executeUpdate();
 
         } catch (java.sql.SQLException e) {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
-                "El equipo se actualizó, pero ocurrió un error al actualizar sus mantenimientos: " + e.getMessage(),
+                "El equipo se actualizó, pero ocurrió un error al "
+                        + "actualizar sus mantenimientos: "
+                        + e.getMessage(),
                 "Error SQL",
                 javax.swing.JOptionPane.ERROR_MESSAGE
             );
+
         } finally {
             try {
                 con.close();
             } catch (java.sql.SQLException ex) {
+                logger.log(
+                    java.util.logging.Level.WARNING,
+                    "No se pudo cerrar la conexión.",
+                    ex
+                );
             }
         }
+    }
+    
+    private boolean tieneMantenimientoPendiente(String codigoEquipo) {
+        java.sql.Connection con = ConexionBD.conectar();
+        
+        if (con == null) {
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "No hay conexión con la base de datos.",
+                "Error de conexión",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+            return true;
+        }
+        
+        String sql = "SELECT COUNT(*) AS total "
+            + "FROM mantenimiento "
+            + "WHERE codigo_equipo = ? "
+            + "AND estado IN ('Pendiente', 'En proceso')";
+        
+        try {
+            java.sql.PreparedStatement ps = con.prepareStatement(sql);
+            ps.setString(1, codigoEquipo);
+            
+            java.sql.ResultSet rs = ps.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getInt("total") > 0;
+            }
+        } catch (java.sql.SQLException e) {
+            javax.swing.JOptionPane.showMessageDialog(
+            this,
+                "Error al validar mantenimientos pendientes: " + e.getMessage(),
+                "Error SQL",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+            return true;
+        } finally {
+            try {
+                con.close();
+            } catch (java.sql.SQLException ex) {
+                
+            }
+        }
+        return false;
     }
 
     @SuppressWarnings("unchecked")
@@ -782,7 +1097,7 @@ public class Inventario extends javax.swing.JFrame {
         cmbLaboratorioModal.setBackground(new java.awt.Color(255, 255, 255));
         cmbLaboratorioModal.setFont(new java.awt.Font("Arial", 1, 12)); // NOI18N
         cmbLaboratorioModal.setForeground(new java.awt.Color(102, 102, 102));
-        cmbLaboratorioModal.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Selecciona", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        cmbLaboratorioModal.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Selecciona" }));
         cmbLaboratorioModal.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         bodyModal.add(cmbLaboratorioModal, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 340, 220, -1));
 
@@ -931,7 +1246,7 @@ public class Inventario extends javax.swing.JFrame {
         laboratorio.setBackground(new java.awt.Color(255, 255, 255));
         laboratorio.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         laboratorio.setForeground(new java.awt.Color(102, 102, 102));
-        laboratorio.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        laboratorio.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos" }));
         laboratorio.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         laboratorio.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         laboratorio.setPreferredSize(new java.awt.Dimension(150, 30));
@@ -1057,6 +1372,7 @@ public class Inventario extends javax.swing.JFrame {
         btnDarBaja.setForeground(new java.awt.Color(255, 255, 255));
         btnDarBaja.setText("Dar de Baja");
         btnDarBaja.setBorderPainted(false);
+        btnDarBaja.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnDarBaja.setFocusPainted(false);
         btnDarBaja.setPreferredSize(new java.awt.Dimension(130, 40));
         btnDarBaja.addActionListener(this::btnDarBajaActionPerformed);
@@ -1104,7 +1420,7 @@ public class Inventario extends javax.swing.JFrame {
 
     private void btnEditarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEditarActionPerformed
         int filaSeleccionada = tablaInventario.getSelectedRow();
-        
+
         if (filaSeleccionada == -1) {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
@@ -1114,29 +1430,58 @@ public class Inventario extends javax.swing.JFrame {
             );
             return;
         }
-        
+
+        int filaModelo = tablaInventario.convertRowIndexToModel(
+            filaSeleccionada
+        );
+
         modoEdicion = true;
-        
-        codigoOriginal = tablaInventario.getValueAt(filaSeleccionada, 0).toString();
-        
-        txtCodigo.setText(tablaInventario.getValueAt(filaSeleccionada, 0).toString());
-        txtNombreEquipo.setText(tablaInventario.getValueAt(filaSeleccionada, 1).toString());
-        cmbTipoDispositivoModal.setSelectedItem(tablaInventario.getValueAt(filaSeleccionada, 2).toString());
-        txtMarca.setText(tablaInventario.getValueAt(filaSeleccionada, 3).toString());
-        txtModelo.setText(tablaInventario.getValueAt(filaSeleccionada, 4).toString());
-        txtNoSerie.setText(tablaInventario.getValueAt(filaSeleccionada, 5).toString());
-        cmbLaboratorioModal.setSelectedItem(tablaInventario.getValueAt(filaSeleccionada, 6).toString());
-                
-        Object observaciones = tablaInventario.getValueAt(filaSeleccionada, 9);
-        txtObservaciones.setText(observaciones != null ? observaciones.toString() : "");
-        
+
+        codigoOriginal = tablaInventario
+                .getModel()
+                .getValueAt(filaModelo, 0)
+                .toString();
+
+        txtCodigo.setText(
+            tablaInventario.getModel().getValueAt(filaModelo, 0).toString()
+        );
+
+        txtNombreEquipo.setText("N/A");
+
+        cmbTipoDispositivoModal.setSelectedItem(
+            tablaInventario.getModel().getValueAt(filaModelo, 2).toString()
+        );
+
+        txtMarca.setText(
+            tablaInventario.getModel().getValueAt(filaModelo, 3).toString()
+        );
+
+        txtModelo.setText(
+            tablaInventario.getModel().getValueAt(filaModelo, 4).toString()
+        );
+
+        txtNoSerie.setText(
+            tablaInventario.getModel().getValueAt(filaModelo, 5).toString()
+        );
+
+        cmbLaboratorioModal.setSelectedItem(
+            tablaInventario.getModel().getValueAt(filaModelo, 6).toString()
+        );
+
+        Object observaciones = tablaInventario
+                .getModel()
+                .getValueAt(filaModelo, 9);
+
+        txtObservaciones.setText(
+            observaciones != null ? observaciones.toString() : ""
+        );
+
         lbTituloModal.setText("Editar Equipo");
         btnGuardar.setText("Actualizar");
-        
-        addEquipo.pack();
-        addEquipo.setLocationRelativeTo(null);
-        addEquipo.setVisible(true);
 
+        addEquipo.pack();
+        addEquipo.setLocationRelativeTo(this);
+        addEquipo.setVisible(true);
     }//GEN-LAST:event_btnEditarActionPerformed
 
     private void btnRegistrarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRegistrarActionPerformed
@@ -1149,7 +1494,8 @@ public class Inventario extends javax.swing.JFrame {
         btnGuardar.setText("Guardar");
         
         addEquipo.pack();
-        addEquipo.setLocationRelativeTo(null);
+        addEquipo.setSize(567, 560);
+        addEquipo.setLocationRelativeTo(this);
         addEquipo.setVisible(true);
     }//GEN-LAST:event_btnRegistrarActionPerformed
 
@@ -1178,8 +1524,8 @@ public class Inventario extends javax.swing.JFrame {
         if (modoEdicion) {
             String codigoAnterior = codigoOriginal;
             String nuevoCodigo = txtCodigo.getText().trim();
-            String nuevoNombreEquipo = txtNombreEquipo.getText().trim();
-            String nuevoLaboratorio = cmbLaboratorioModal.getSelectedItem().toString();
+            String nuevoLaboratorio
+                    = cmbLaboratorioModal.getSelectedItem().toString();
 
             boolean actualizado = actualizarEquipoBD();
 
@@ -1187,7 +1533,6 @@ public class Inventario extends javax.swing.JFrame {
                 actualizarMantenimientosDelEquipo(
                     codigoAnterior,
                     nuevoCodigo,
-                    nuevoNombreEquipo,
                     nuevoLaboratorio
                 );
 
@@ -1207,13 +1552,14 @@ public class Inventario extends javax.swing.JFrame {
                 lbTituloModal.setText("Registrar Equipo");
                 btnGuardar.setText("Guardar");
             }
+
         } else {
             boolean guardado = guardarEquipoBD();
 
             if (guardado) {
                 javax.swing.JOptionPane.showMessageDialog(
                     addEquipo,
-                    "Equipo registrado correctamente",
+                    "Equipo registrado correctamente.",
                     "Registro exitoso",
                     javax.swing.JOptionPane.INFORMATION_MESSAGE
                 );
@@ -1222,7 +1568,7 @@ public class Inventario extends javax.swing.JFrame {
                 addEquipo.setVisible(false);
                 cargarTablaInventarioFiltrada();
             }
-        }   
+        }
     }//GEN-LAST:event_btnGuardarActionPerformed
 
     private void btnBuscarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBuscarActionPerformed
@@ -1234,9 +1580,9 @@ public class Inventario extends javax.swing.JFrame {
     }//GEN-LAST:event_btnLimpiarActionPerformed
 
     private void btnDarBajaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnDarBajaActionPerformed
-        int filasSeleccionada = tablaInventario.getSelectedRow();
-        
-        if (filasSeleccionada == -1) {
+        int filaSeleccionada = tablaInventario.getSelectedRow();
+
+        if (filaSeleccionada == -1) {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
                 "Selecciona un equipo para darlo de baja.",
@@ -1245,9 +1591,24 @@ public class Inventario extends javax.swing.JFrame {
             );
             return;
         }
-        
-        String codigo = tablaInventario.getValueAt(filasSeleccionada, 0).toString();
-        
+
+        int filaModelo = tablaInventario.convertRowIndexToModel(filaSeleccionada);
+
+        String codigo = tablaInventario
+                .getModel()
+                .getValueAt(filaModelo, 0)
+                .toString();
+
+        if (tieneMantenimientoPendiente(codigo)) {
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "No puedes dar de baja este equipo porque tiene un mantenimiento pendiente o en proceso.",
+                "Mantenimiento activo",
+                javax.swing.JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
         int confirmacion = javax.swing.JOptionPane.showConfirmDialog(
             this,
             "¿Estás seguro que deseas dar de baja este equipo?",
@@ -1255,11 +1616,11 @@ public class Inventario extends javax.swing.JFrame {
             javax.swing.JOptionPane.YES_NO_OPTION,
             javax.swing.JOptionPane.WARNING_MESSAGE
         );
-        
+
         if (confirmacion != javax.swing.JOptionPane.YES_OPTION) {
             return;
         }
-        
+
         darDeBajaEquipo(codigo);
     }//GEN-LAST:event_btnDarBajaActionPerformed
 
@@ -1281,7 +1642,7 @@ public class Inventario extends javax.swing.JFrame {
     }//GEN-LAST:event_btnReservasActionPerformed
 
     private void btnExportarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarActionPerformed
-        exportarTablaInventarioCSV();
+        exportarTablaInventarioExcel();
     }//GEN-LAST:event_btnExportarActionPerformed
 
     private void btnReporteFallasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReporteFallasActionPerformed

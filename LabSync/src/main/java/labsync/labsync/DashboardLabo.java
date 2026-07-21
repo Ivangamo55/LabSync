@@ -4,6 +4,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.JOptionPane;
 
 public class DashboardLabo extends javax.swing.JFrame {
     
@@ -31,6 +33,8 @@ public class DashboardLabo extends javax.swing.JFrame {
         cargarEquiposConFalla();
         cargarMantenimientosPendientes();
         cargarReservacionesHoy();
+        cargarUltimosMantenimiento();
+        cargarUltimosRegistrosBitacora();
     }
     
     private void cargarReservacionesHoy() {
@@ -125,6 +129,130 @@ public class DashboardLabo extends javax.swing.JFrame {
         }
     }
     
+    private void cargarUltimosMantenimiento() {
+        DefaultTableModel modelo = new DefaultTableModel();
+        Connection con = ConexionBD.conectar();
+        
+        modelo.addColumn("Fecha");
+        modelo.addColumn("Código Equipo");
+        modelo.addColumn("Nombre Equipo");
+        modelo.addColumn("Laboratorio");
+        modelo.addColumn("Tipo");
+        modelo.addColumn("Estado");
+        modelo.addColumn("Responsable");
+        
+        String sql = "SELECT "
+            + "DATE_FORMAT(fecha_programada, '%d/%m/%Y') AS fecha_programada, "
+            + "codigo_equipo, "
+            + "nombre_equipo, "
+            + "laboratorio, "
+            + "tipo_mantenimiento, "
+            + "estado, "
+            + "responsable "
+            + "FROM mantenimiento "
+            + "ORDER BY fecha_programada DESC, id_mantenimiento DESC "
+            + "LIMIT 5";
+        
+        if (con == null) {
+            tablaUltimosMants.setModel(modelo);
+            return;
+        }
+        
+        try {
+            PreparedStatement ps = con.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery();
+            
+            while (rs.next()) {
+                Object[] fila = new Object[7];
+                
+                fila[0] = rs.getString("fecha_programada");
+                fila[1] = rs.getString("codigo_equipo");
+                fila[2] = rs.getString("nombre_equipo");
+                fila[3] = rs.getString("laboratorio");
+                fila[4] = rs.getString("tipo_mantenimiento");
+                fila[5] = rs.getString("estado");
+                fila[6] = rs.getString("responsable");
+                
+                modelo.addRow(fila);
+            }
+            
+            tablaUltimosMants.setModel(modelo);
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Error al cargar últimos mantenimientos: " + e.getMessage(),
+                "Error SQL",
+                JOptionPane.ERROR_MESSAGE
+            );
+        } finally {
+            try {
+                con.close();
+            } catch (SQLException ex) {
+                
+            }
+        }
+    }
+    
+    private void cargarUltimosRegistrosBitacora() {
+        DefaultTableModel modelo = new DefaultTableModel();
+        Connection con = ConexionBD.conectar();
+        
+        modelo.addColumn("Hora");
+        modelo.addColumn("Usuario");
+        modelo.addColumn("Rol");
+        modelo.addColumn("Laboratorio");
+        modelo.addColumn("Actividad");
+        modelo.addColumn("Estado");
+        
+        String sql = "SELECT "
+            + "DATE_FORMAT(fecha_registro, '%H:%i') AS hora, "
+            + "nombre_usuario, "
+            + "rol_usuario, "
+            + "laboratorio, "
+            + "actividad_materia, "
+            + "estado "
+            + "FROM bitacora "
+            + "ORDER BY fecha_registro DESC "
+            + "LIMIT 5";
+        
+        if (con == null) {
+            tablaBitacora.setModel(modelo);
+            return;
+        }
+        
+        try {
+            PreparedStatement ps = con.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery();
+            
+            while (rs.next()) {
+                Object[] fila = new Object[6];
+                
+                fila[0] = rs.getString("hora");
+                fila[1] = rs.getString("nombre_usuario");
+                fila[2] = rs.getString("rol_usuario");
+                fila[3] = rs.getString("laboratorio");
+                fila[4] = rs.getString("actividad_materia");
+                fila[5] = rs.getString("estado");
+                
+                modelo.addRow(fila);
+            }
+            tablaBitacora.setModel(modelo);
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Error al cargar últimos registros de bitácora: " + e.getMessage(),
+                "Error SQL",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+        } finally {
+            try {
+                con.close();
+            } catch (SQLException ex) {
+                
+            }
+        }
+    }
+    
     @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
@@ -154,10 +282,10 @@ public class DashboardLabo extends javax.swing.JFrame {
         jScrollPane2 = new javax.swing.JScrollPane();
         tablaBitacora = new javax.swing.JTable();
         lbBitacora = new javax.swing.JLabel();
-        lbLabs = new javax.swing.JLabel();
+        lbUltimoMants = new javax.swing.JLabel();
         panelLabs = new javax.swing.JPanel();
         jScrollPane1 = new javax.swing.JScrollPane();
-        tablaLabs = new javax.swing.JTable();
+        tablaUltimosMants = new javax.swing.JTable();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("LabSync - Laboratorista");
@@ -372,6 +500,7 @@ public class DashboardLabo extends javax.swing.JFrame {
         panelTabla.setPreferredSize(new java.awt.Dimension(960, 400));
         panelTabla.setVerifyInputWhenFocusTarget(false);
 
+        tablaBitacora.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         tablaBitacora.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null, null, null},
@@ -412,35 +541,36 @@ public class DashboardLabo extends javax.swing.JFrame {
         lbBitacora.setText("Últimos registros de bitácora");
         panelContenedor.add(lbBitacora, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 230, -1, -1));
 
-        lbLabs.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
-        lbLabs.setForeground(new java.awt.Color(102, 102, 102));
-        lbLabs.setText("Laboratorios Disponibles");
-        panelContenedor.add(lbLabs, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 450, -1, -1));
+        lbUltimoMants.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
+        lbUltimoMants.setForeground(new java.awt.Color(102, 102, 102));
+        lbUltimoMants.setText("Ultimos mantenimientos");
+        panelContenedor.add(lbUltimoMants, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 450, -1, -1));
 
         panelLabs.setBackground(new java.awt.Color(255, 255, 255));
         panelLabs.setPreferredSize(new java.awt.Dimension(960, 50));
 
-        tablaLabs.setModel(new javax.swing.table.DefaultTableModel(
+        tablaUltimosMants.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        tablaUltimosMants.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
-                {null, null, null, null, null},
-                {null, null, null, null, null},
-                {null, null, null, null, null},
-                {null, null, null, null, null}
+                {null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null}
             },
             new String [] {
-                "Laboratorio", "Estado", "Disponible Hasta", "Proxima Reserva", "Capacidad"
+                "Fecha", "Código Equipo", "Nombre Equipo", "Laboratorio", "Tipo", "Estado", "Responsable"
             }
         ) {
             boolean[] canEdit = new boolean [] {
-                false, false, true, false, false
+                false, false, false, false, false, false, false
             };
 
             public boolean isCellEditable(int rowIndex, int columnIndex) {
                 return canEdit [columnIndex];
             }
         });
-        tablaLabs.setRowHeight(27);
-        jScrollPane1.setViewportView(tablaLabs);
+        tablaUltimosMants.setRowHeight(27);
+        jScrollPane1.setViewportView(tablaUltimosMants);
 
         javax.swing.GroupLayout panelLabsLayout = new javax.swing.GroupLayout(panelLabs);
         panelLabs.setLayout(panelLabsLayout);
@@ -537,28 +667,7 @@ public class DashboardLabo extends javax.swing.JFrame {
         this.dispose();
     }//GEN-LAST:event_btnReporteFallasActionPerformed
 
-    /**
-     * @param args the command line arguments
-     */
     public static void main(String args[]) {
-        /* Set the Nimbus look and feel */
-        //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
-        /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
-         * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html 
-         */
-        try {
-            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
-                if ("Nimbus".equals(info.getName())) {
-                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
-                    break;
-                }
-            }
-        } catch (ReflectiveOperationException | javax.swing.UnsupportedLookAndFeelException ex) {
-            logger.log(java.util.logging.Level.SEVERE, null, ex);
-        }
-        //</editor-fold>
-
-        /* Create and display the form */
         java.awt.EventQueue.invokeLater(() -> new DashboardLabo().setVisible(true));
     }
 
@@ -576,19 +685,19 @@ public class DashboardLabo extends javax.swing.JFrame {
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JLabel lbBitacora;
     private javax.swing.JLabel lbEquipos;
-    private javax.swing.JLabel lbLabs;
     private javax.swing.JLabel lbMantPendientes;
     private javax.swing.JLabel lbMantPendientesTitulo;
     private javax.swing.JLabel lbNombreUsuario;
     private javax.swing.JLabel lbNumFallaEquipos;
     private javax.swing.JLabel lbReservaciones;
     private javax.swing.JLabel lbReservacionesTitulo;
+    private javax.swing.JLabel lbUltimoMants;
     private javax.swing.JPanel panelContenedor;
     private javax.swing.JPanel panelLabs;
     private javax.swing.JPanel panelTabla;
     private javax.swing.JPanel sidebarVerde;
     private javax.swing.JTable tablaBitacora;
-    private javax.swing.JTable tablaLabs;
+    private javax.swing.JTable tablaUltimosMants;
     private javax.swing.JPanel tarjeta1;
     private javax.swing.JPanel tarjeta2;
     private javax.swing.JPanel tarjeta3;

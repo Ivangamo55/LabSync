@@ -10,18 +10,35 @@ import java.time.LocalDate;
 import com.toedter.calendar.JDateChooser;
 import java.text.SimpleDateFormat;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
+
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
 public class Mantenimiento extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(Mantenimiento.class.getName());
     private String nombreUsuario;
     private int idMantenimientoSeleccionado = 0;
     boolean modoEdicion = false;
-    private final String PH_BUSCAR = "Código, equipo, laboratorio o estado";
+    private final String PH_BUSCAR = "Código, laboratorio o responsable";
     private final Color COLOR_PLACEHOLDER = new Color(150, 150, 150);
     private final Color COLOR_TEXTO = new Color(51, 51, 51);
     
     public Mantenimiento(String nombreRecibido) {
         initComponents();
+        LaboratoriosBD.cargarTodos(cmbLaboratorio, "Todos");
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
         this.nombreUsuario = nombreRecibido;
@@ -31,6 +48,7 @@ public class Mantenimiento extends javax.swing.JFrame {
         
         txtResponsable.setText(nombreUsuario);
         
+        ocultarCampoNombreEquipo();
         configurarDataChooser();
         ponerPlaceholderBuscar();
         cargarCodigosEquipo();
@@ -39,6 +57,7 @@ public class Mantenimiento extends javax.swing.JFrame {
     
     public Mantenimiento() {
         initComponents();
+        LaboratoriosBD.cargarTodos(cmbLaboratorio, "Todos");
 
         this.nombreUsuario = "Usuario";
 
@@ -47,14 +66,76 @@ public class Mantenimiento extends javax.swing.JFrame {
 
         txtResponsable.setText(nombreUsuario);
 
+        ocultarCampoNombreEquipo();
         configurarDataChooser();
         ponerPlaceholderBuscar();
         cargarCodigosEquipo();
         cargarTablaMantenimiento();
     }
     
+    private void ocultarCampoNombreEquipo() {
+        bodyModal.setLayout(null);
+
+        lbNombreEquipo.setVisible(false);
+        txtNombreEquipoMant.setVisible(false);
+        txtNombreEquipoMant.setText("N/A");
+
+        // Título y línea
+        lbTituloModal.setBounds(30, 25, 350, 30);
+        linea.setBounds(30, 65, 500, 3);
+
+        // Primera fila
+        lbCodigoEquipo.setBounds(30, 90, 220, 22);
+        cmbCodigoEquipo.setBounds(30, 120, 220, 24);
+
+        lbLaboratorioModal.setBounds(310, 90, 220, 22);
+        txtLaboratorioModal.setBounds(310, 120, 220, 24);
+
+        // Segunda fila
+        lbTipoMantModal.setBounds(30, 170, 220, 22);
+        cmbTipoMantModal.setBounds(30, 200, 220, 24);
+
+        lbFecha.setBounds(310, 170, 220, 22);
+        dateFechaProgramada.setBounds(310, 200, 220, 24);
+
+        // Tercera fila
+        lbResponsable.setBounds(30, 250, 220, 22);
+        txtResponsable.setBounds(30, 280, 220, 24);
+
+        lbEstadoModal.setBounds(310, 250, 220, 22);
+        cmbEstadoMantModal.setBounds(310, 280, 220, 24);
+
+        // Parte inferior
+        lbObservaciones.setBounds(310, 330, 220, 22);
+        jScrollPane2.setBounds(310, 360, 220, 100);
+
+        btnGuardarMant.setBounds(50, 360, 160, 40);
+        btnCancelarMantModal.setBounds(50, 420, 160, 40);
+
+        bodyModal.setPreferredSize(new java.awt.Dimension(561, 500));
+        bodyModal.setMinimumSize(new java.awt.Dimension(561, 500));
+        bodyModal.setSize(561, 500);
+
+        bodyModal.revalidate();
+        bodyModal.repaint();
+    }
+    
+    private void ocultarColumnaNombreEquipo() {
+        if (tablaMantenimiento.getColumnModel().getColumnCount() > 2) {
+            javax.swing.table.TableColumn columnaNombre
+                    = tablaMantenimiento.getColumnModel().getColumn(2);
+
+            columnaNombre.setMinWidth(0);
+            columnaNombre.setMaxWidth(0);
+            columnaNombre.setPreferredWidth(0);
+            columnaNombre.setWidth(0);
+        }
+    }
+    
     private void configurarDataChooser() {
         dateFechaProgramada.setDateFormatString("yyyy-MM-dd");
+        dateFechaProgramada.setMinSelectableDate(new java.util.Date());
+        ValidacionFechas.bloquearFinesDeSemana(dateFechaProgramada);
         dateFechaProgramada.setBackground(Color.WHITE);
         dateFechaProgramada.setForeground(new Color(51, 51, 51));
         dateFechaProgramada.setFont(new Font("Arial", Font.PLAIN, 12));
@@ -102,11 +183,13 @@ public class Mantenimiento extends javax.swing.JFrame {
     }
     
     private void limpiarCampos() {
+        cmbCodigoEquipo.setEnabled(true);
+
         if (cmbCodigoEquipo.getItemCount() > 0) {
             cmbCodigoEquipo.setSelectedIndex(0);
         }
 
-        txtNombreEquipoMant.setText("");
+        txtNombreEquipoMant.setText("N/A");
         txtLaboratorioModal.setText("");
         dateFechaProgramada.setDate(null);
         txtObservacionesMant.setText("");
@@ -161,8 +244,9 @@ public class Mantenimiento extends javax.swing.JFrame {
     private void cargarDatosEquipoSeleccionado() {
         Object itemSeleccionado = cmbCodigoEquipo.getSelectedItem();
 
+        txtNombreEquipoMant.setText("N/A");
+
         if (itemSeleccionado == null) {
-            txtNombreEquipoMant.setText("");
             txtLaboratorioModal.setText("");
             return;
         }
@@ -170,7 +254,6 @@ public class Mantenimiento extends javax.swing.JFrame {
         String codigoSeleccionado = itemSeleccionado.toString();
 
         if (codigoSeleccionado.equals("Selecciona")) {
-            txtNombreEquipoMant.setText("");
             txtLaboratorioModal.setText("");
             return;
         }
@@ -187,7 +270,9 @@ public class Mantenimiento extends javax.swing.JFrame {
             return;
         }
 
-        String sql = "SELECT nombre_equipo, laboratorio FROM inventario WHERE codigo = ?";
+        String sql = "SELECT laboratorio "
+                + "FROM inventario "
+                + "WHERE codigo = ?";
 
         try {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
@@ -196,10 +281,8 @@ public class Mantenimiento extends javax.swing.JFrame {
             java.sql.ResultSet rs = ps.executeQuery();
 
             if (rs.next()) {
-                txtNombreEquipoMant.setText(rs.getString("nombre_equipo"));
                 txtLaboratorioModal.setText(rs.getString("laboratorio"));
             } else {
-                txtNombreEquipoMant.setText("");
                 txtLaboratorioModal.setText("");
             }
 
@@ -214,64 +297,93 @@ public class Mantenimiento extends javax.swing.JFrame {
         } finally {
             try {
                 con.close();
-            } catch (java.sql.SQLException e) {
+            } catch (java.sql.SQLException ex) {
+                logger.log(
+                    java.util.logging.Level.WARNING,
+                    "No se pudo cerrar la conexión.",
+                    ex
+                );
             }
         }
     }
     
     private boolean validarCamposMantenimiento() {
         Object codigoSeleccionado = cmbCodigoEquipo.getSelectedItem();
-        
-        if (codigoSeleccionado == null || codigoSeleccionado.toString().equals("Selecciona")) {
-            mostrarErrorValidacion("Selecciona el código del equipo.", cmbCodigoEquipo);
-            return false;
-        }
-        
-        if (txtNombreEquipoMant.getText().trim().isEmpty()) {
-            mostrarErrorValidacion("El nombre del equpo no se cargó correctamente.", txtNombreEquipoMant);
-            return false;
-        }
-        
-        if (txtLaboratorioModal.getText().trim().isEmpty()) {
-            mostrarErrorValidacion("El laboratorio no se cargó correctamente.", txtLaboratorioModal);
-            return false;
-        }
-        
-        if (cmbTipoMantModal.getSelectedIndex()== 0) {
-            mostrarErrorValidacion("Selecciona el tipo de mantenimiento.", cmbTipoMantModal);
-            return false;
-        }
-        
-        java.time.LocalDate fechaSeleccionada = dateFechaProgramada.getDate()
-            .toInstant()
-            .atZone(java.time.ZoneId.systemDefault())
-            .toLocalDate();
-        
-        java.time.LocalDate fechaHoy = java.time.LocalDate.now();
-        
-        if (fechaSeleccionada.isBefore(fechaHoy)) {
+
+        if (codigoSeleccionado == null
+                || codigoSeleccionado.toString().equals("Selecciona")) {
+
             mostrarErrorValidacion(
-                "La fecha programada no puede ser anterior al dia de hoy.",
-                dateFechaProgramada   
+                "Selecciona el código del equipo.",
+                cmbCodigoEquipo
             );
             return false;
         }
-        
+
+        if (txtLaboratorioModal.getText().trim().isEmpty()) {
+            mostrarErrorValidacion(
+                "El laboratorio no se cargó correctamente.",
+                txtLaboratorioModal
+            );
+            return false;
+        }
+
+        if (cmbTipoMantModal.getSelectedIndex() == 0) {
+            mostrarErrorValidacion(
+                "Selecciona el tipo de mantenimiento.",
+                cmbTipoMantModal
+            );
+            return false;
+        }
+
         if (dateFechaProgramada.getDate() == null) {
-            mostrarErrorValidacion("Selecciona la fecha programada", dateFechaProgramada);
+            mostrarErrorValidacion(
+                "Selecciona la fecha programada.",
+                dateFechaProgramada
+            );
             return false;
         }
-          
+
+        java.time.LocalDate fechaSeleccionada
+                = dateFechaProgramada.getDate()
+                        .toInstant()
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toLocalDate();
+
+        java.time.LocalDate fechaHoy = java.time.LocalDate.now();
+
+        if (fechaSeleccionada.isBefore(fechaHoy)) {
+            mostrarErrorValidacion(
+                "La fecha programada no puede ser anterior al día de hoy.",
+                dateFechaProgramada
+            );
+            return false;
+        }
+
+        if (!ValidacionFechas.validarDiaHabil(
+                addMantenimiento,
+                dateFechaProgramada.getDate(),
+                "programar mantenimientos")) {
+            dateFechaProgramada.requestFocus();
+            return false;
+        }
+
         if (txtResponsable.getText().trim().isEmpty()) {
-            mostrarErrorValidacion("Ingresa el responsable del mantenimiento.", txtResponsable);
+            mostrarErrorValidacion(
+                "Ingresa el responsable del mantenimiento.",
+                txtResponsable
+            );
             return false;
         }
-        
+
         if (cmbEstadoMantModal.getSelectedIndex() == 0) {
-            mostrarErrorValidacion("Selecciona el estado del mantenimiento", cmbEstadoMantModal);
+            mostrarErrorValidacion(
+                "Selecciona el estado del mantenimiento.",
+                cmbEstadoMantModal
+            );
             return false;
         }
-        
+
         return true;
     }
     
@@ -307,17 +419,25 @@ public class Mantenimiento extends javax.swing.JFrame {
     }
     
     private boolean guardarMantenimientoBD() {
-        String codigoEquipo = cmbCodigoEquipo.getSelectedItem().toString();
-        String nombreEquipo = txtNombreEquipoMant.getText().trim();
+        String codigoEquipo
+                = cmbCodigoEquipo.getSelectedItem().toString();
+
+        String nombreEquipo = "N/A";
         String laboratorio = txtLaboratorioModal.getText().trim();
-        String tipoMantenimiento = cmbTipoMantModal.getSelectedItem().toString();
+
+        String tipoMantenimiento
+                = cmbTipoMantModal.getSelectedItem().toString();
+
         String fechaProgramada = obtenerFechaProgramada();
-        String estadoMantenimiento = cmbEstadoMantModal.getSelectedItem().toString();
+
+        String estadoMantenimiento
+                = cmbEstadoMantModal.getSelectedItem().toString();
+
         String responsable = txtResponsable.getText().trim();
         String observaciones = txtObservacionesMant.getText().trim();
-        
+
         java.sql.Connection con = ConexionBD.conectar();
-        
+
         if (con == null) {
             javax.swing.JOptionPane.showMessageDialog(
                 addMantenimiento,
@@ -327,14 +447,16 @@ public class Mantenimiento extends javax.swing.JFrame {
             );
             return false;
         }
-        
+
         String sql = "INSERT INTO mantenimiento "
-            + "(codigo_equipo, nombre_equipo, laboratorio, tipo_mantenimiento, fecha_programada, estado, responsable, observaciones) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        
+                + "(codigo_equipo, nombre_equipo, laboratorio, "
+                + "tipo_mantenimiento, fecha_programada, estado, "
+                + "responsable, observaciones) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+
         try {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            
+
             ps.setString(1, codigoEquipo);
             ps.setString(2, nombreEquipo);
             ps.setString(3, laboratorio);
@@ -343,11 +465,12 @@ public class Mantenimiento extends javax.swing.JFrame {
             ps.setString(6, estadoMantenimiento);
             ps.setString(7, responsable);
             ps.setString(8, observaciones);
-            
+
             int filas = ps.executeUpdate();
-            
+
             return filas > 0;
-        } catch (java.sql.SQLException e ) {
+
+        } catch (java.sql.SQLException e) {
             javax.swing.JOptionPane.showMessageDialog(
                 addMantenimiento,
                 "Error al guardar el mantenimiento: " + e.getMessage(),
@@ -355,11 +478,16 @@ public class Mantenimiento extends javax.swing.JFrame {
                 javax.swing.JOptionPane.ERROR_MESSAGE
             );
             return false;
+
         } finally {
             try {
                 con.close();
-            } catch (java.sql.SQLException e) {
-                
+            } catch (java.sql.SQLException ex) {
+                logger.log(
+                    java.util.logging.Level.WARNING,
+                    "No se pudo cerrar la conexión.",
+                    ex
+                );
             }
         }
     }
@@ -379,6 +507,7 @@ public class Mantenimiento extends javax.swing.JFrame {
         
         tablaMantenimiento.setModel(modelo);
         ocultarColumnaID();
+        ocultarColumnaNombreEquipo();
         
         String sql = "SELECT id_mantenimiento, codigo_equipo, nombre_equipo, laboratorio, tipo_mantenimiento, "
             + "DATE_FORMAT(fecha_programada, '%Y-%m-%d') AS fecha_programada, "
@@ -465,8 +594,12 @@ public class Mantenimiento extends javax.swing.JFrame {
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
         if (!textoBusqueda.isEmpty()) {
-            sql += "AND (codigo_equipo LIKE ? OR nombre_equipo LIKE ? OR responsable LIKE ?) ";
+            sql += "AND (codigo_equipo LIKE ? "
+                    + "OR laboratorio LIKE ? "
+                    + "OR responsable LIKE ?) ";
+
             String busqueda = "%" + textoBusqueda + "%";
+
             parametros.add(busqueda);
             parametros.add(busqueda);
             parametros.add(busqueda);
@@ -530,6 +663,7 @@ public class Mantenimiento extends javax.swing.JFrame {
             
             tablaMantenimiento.setModel(modelo);
             ocultarColumnaID();
+            ocultarColumnaNombreEquipo();
         } catch (java.sql.SQLException e) {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
@@ -661,12 +795,20 @@ public class Mantenimiento extends javax.swing.JFrame {
     }
     
     private boolean actualizarMantenimientoBD() {
-        String codigoEquipo = cmbCodigoEquipo.getSelectedItem().toString();
-        String nombreEquipo = txtNombreEquipoMant.getText().trim();
+        String codigoEquipo
+                = cmbCodigoEquipo.getSelectedItem().toString();
+
+        String nombreEquipo = "N/A";
         String laboratorio = txtLaboratorioModal.getText().trim();
-        String tipoMantenimiento = cmbTipoMantModal.getSelectedItem().toString();
+
+        String tipoMantenimiento
+                = cmbTipoMantModal.getSelectedItem().toString();
+
         String fechaProgramada = obtenerFechaProgramada();
-        String estadoMantenimiento = cmbEstadoMantModal.getSelectedItem().toString();
+
+        String estadoMantenimiento
+                = cmbEstadoMantModal.getSelectedItem().toString();
+
         String responsable = txtResponsable.getText().trim();
         String observaciones = txtObservacionesMant.getText().trim();
 
@@ -723,6 +865,11 @@ public class Mantenimiento extends javax.swing.JFrame {
             try {
                 con.close();
             } catch (java.sql.SQLException ex) {
+                logger.log(
+                    java.util.logging.Level.WARNING,
+                    "No se pudo cerrar la conexión.",
+                    ex
+                );
             }
         }
     }
@@ -834,6 +981,229 @@ public class Mantenimiento extends javax.swing.JFrame {
         }
         
         return false;
+    }
+    
+    private void exportarTablaMantenimientoExcel() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Guardar mantenimiento");
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Archivo Excel (*.xlsx)", "xlsx"));
+        fileChooser.setSelectedFile(new File("mantenimiento_labsync.xlsx"));
+
+        int seleccion = fileChooser.showSaveDialog(this);
+
+        if (seleccion != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File archivo = fileChooser.getSelectedFile();
+
+        if (!archivo.getName().toLowerCase().endsWith(".xlsx")) {
+            archivo = new File(archivo.getAbsolutePath() + ".xlsx");
+        }
+
+        String textoBusqueda = txtBuscar.getText().trim();
+
+        if (textoBusqueda.equals(PH_BUSCAR)) {
+            textoBusqueda = "";
+        }
+
+        String tipoSeleccionado = cmbTipoMant.getSelectedItem().toString();
+        String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
+        String laboratorioSeleccionado = cmbLaboratorio.getSelectedItem().toString();
+
+        String sql = "SELECT "
+            + "codigo_equipo, "
+            + "nombre_equipo, "
+            + "laboratorio, "
+            + "tipo_mantenimiento, "
+            + "DATE_FORMAT(fecha_programada, '%d/%m/%Y') AS fecha_programada, "
+            + "estado, "
+            + "responsable, "
+            + "IFNULL(observaciones, '') AS observaciones "
+            + "FROM mantenimiento "
+            + "WHERE 1=1 ";
+
+        java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
+
+        if (!textoBusqueda.isEmpty()) {
+            sql += "AND (codigo_equipo LIKE ? "
+                + "OR nombre_equipo LIKE ? "
+                + "OR laboratorio LIKE ? "
+                + "OR estado LIKE ? "
+                + "OR responsable LIKE ?) ";
+
+            String busqueda = "%" + textoBusqueda + "%";
+
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+        }
+
+        if (!tipoSeleccionado.equals("Todos")) {
+            sql += "AND tipo_mantenimiento = ? ";
+            parametros.add(tipoSeleccionado);
+        }
+
+        if (!estadoSeleccionado.equals("Todos")) {
+            sql += "AND estado = ? ";
+            parametros.add(estadoSeleccionado);
+        } else {
+            sql += "AND estado IN ('Pendiente', 'En proceso') ";
+        }
+
+        if (!laboratorioSeleccionado.equals("Todos")) {
+            sql += "AND laboratorio = ? ";
+            parametros.add(laboratorioSeleccionado);
+        }
+
+        sql += "ORDER BY fecha_programada DESC";
+
+        java.sql.Connection con = ConexionBD.conectar();
+
+        if (con == null) {
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "No hay conexi\u00F3n con la base de datos.",
+                "Error de conexi\u00F3n",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        try (
+            Workbook workbook = new XSSFWorkbook();
+            FileOutputStream salida = new FileOutputStream(archivo)
+        ) {
+            Sheet hoja = workbook.createSheet("Mantenimiento");
+
+            CellStyle estiloTitulo = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font fuenteTitulo = workbook.createFont();
+            fuenteTitulo.setBold(true);
+            fuenteTitulo.setFontHeightInPoints((short) 16);
+            estiloTitulo.setFont(fuenteTitulo);
+            estiloTitulo.setAlignment(HorizontalAlignment.CENTER);
+
+            CellStyle estiloEncabezado = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font fuenteEncabezado = workbook.createFont();
+            fuenteEncabezado.setBold(true);
+            fuenteEncabezado.setColor(IndexedColors.WHITE.getIndex());
+            estiloEncabezado.setFont(fuenteEncabezado);
+            estiloEncabezado.setFillForegroundColor(IndexedColors.GREEN.getIndex());
+            estiloEncabezado.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            estiloEncabezado.setAlignment(HorizontalAlignment.CENTER);
+            estiloEncabezado.setBorderTop(BorderStyle.THIN);
+            estiloEncabezado.setBorderBottom(BorderStyle.THIN);
+            estiloEncabezado.setBorderLeft(BorderStyle.THIN);
+            estiloEncabezado.setBorderRight(BorderStyle.THIN);
+
+            CellStyle estiloCelda = workbook.createCellStyle();
+            estiloCelda.setBorderTop(BorderStyle.THIN);
+            estiloCelda.setBorderBottom(BorderStyle.THIN);
+            estiloCelda.setBorderLeft(BorderStyle.THIN);
+            estiloCelda.setBorderRight(BorderStyle.THIN);
+
+            Row filaTitulo = hoja.createRow(0);
+            Cell celdaTitulo = filaTitulo.createCell(0);
+            celdaTitulo.setCellValue("Reporte de Mantenimiento - LabSync");
+            celdaTitulo.setCellStyle(estiloTitulo);
+
+            hoja.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 7));
+
+            Row filaEncabezado = hoja.createRow(2);
+
+            String[] encabezados = {
+                "C\u00F3digo Equipo",
+                "Nombre Equipo",
+                "Laboratorio",
+                "Tipo Mantenimiento",
+                "Fecha Programada",
+                "Estado",
+                "Responsable",
+                "Observaciones"
+            };
+
+            for (int i = 0; i < encabezados.length; i++) {
+                Cell celda = filaEncabezado.createCell(i);
+                celda.setCellValue(encabezados[i]);
+                celda.setCellStyle(estiloEncabezado);
+            }
+
+            java.sql.PreparedStatement ps = con.prepareStatement(sql);
+
+            for (int i = 0; i < parametros.size(); i++) {
+                ps.setString(i + 1, parametros.get(i));
+            }
+
+            java.sql.ResultSet rs = ps.executeQuery();
+
+            int filaExcel = 3;
+            int totalRegistros = 0;
+
+            while (rs.next()) {
+                Row fila = hoja.createRow(filaExcel);
+
+                Object[] datos = {
+                    rs.getString("codigo_equipo"),
+                    rs.getString("nombre_equipo"),
+                    rs.getString("laboratorio"),
+                    rs.getString("tipo_mantenimiento"),
+                    rs.getString("fecha_programada"),
+                    rs.getString("estado"),
+                    rs.getString("responsable"),
+                    rs.getString("observaciones")
+                };
+
+                for (int col = 0; col < datos.length; col++) {
+                    Cell celda = fila.createCell(col);
+                    celda.setCellValue(datos[col] != null ? datos[col].toString() : "");
+                    celda.setCellStyle(estiloCelda);
+                }
+
+                filaExcel++;
+                totalRegistros++;
+            }
+
+            if (totalRegistros == 0) {
+                javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "No hay datos para exportar con los filtros actuales.",
+                    "Sin datos",
+                    javax.swing.JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
+
+            hoja.createFreezePane(0, 3);
+            hoja.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(2, filaExcel - 1, 0, encabezados.length - 1));
+
+            for (int col = 0; col < encabezados.length; col++) {
+                hoja.autoSizeColumn(col);
+            }
+
+            workbook.write(salida);
+
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "El mantenimiento se export\u00F3 correctamente.",
+                "Exportaci\u00F3n exitosa",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE
+            );
+
+        } catch (Exception e) {
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "Error al exportar mantenimiento: " + e.getMessage(),
+                "Error",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+        } finally {
+            try {
+                con.close();
+            } catch (java.sql.SQLException ex) {
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -1152,7 +1522,7 @@ public class Mantenimiento extends javax.swing.JFrame {
         cmbLaboratorio.setBackground(new java.awt.Color(255, 255, 255));
         cmbLaboratorio.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         cmbLaboratorio.setForeground(new java.awt.Color(102, 102, 102));
-        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos" }));
         cmbLaboratorio.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         cmbLaboratorio.setMinimumSize(new java.awt.Dimension(170, 170));
         cmbLaboratorio.setName(""); // NOI18N
@@ -1270,6 +1640,7 @@ public class Mantenimiento extends javax.swing.JFrame {
         btnExportar.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnExportar.setFocusPainted(false);
         btnExportar.setPreferredSize(new java.awt.Dimension(130, 40));
+        btnExportar.addActionListener(this::btnExportarActionPerformed);
         body.add(btnExportar, new org.netbeans.lib.awtextra.AbsoluteConstraints(900, 500, -1, -1));
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
@@ -1345,7 +1716,10 @@ public class Mantenimiento extends javax.swing.JFrame {
         lbTituloModal.setText("Registrar Mantenimiento");
         btnGuardarMant.setText("Guardar");
 
+        ocultarCampoNombreEquipo();
+
         addMantenimiento.pack();
+        addMantenimiento.setSize(561, 535);
         addMantenimiento.setLocationRelativeTo(this);
         addMantenimiento.setVisible(true);
     }//GEN-LAST:event_btnRegistrarActionPerformed
@@ -1509,7 +1883,7 @@ public class Mantenimiento extends javax.swing.JFrame {
         );
 
         cmbCodigoEquipo.setSelectedItem(tablaMantenimiento.getValueAt(filaSeleccionada, 1).toString());
-        txtNombreEquipoMant.setText(tablaMantenimiento.getValueAt(filaSeleccionada, 2).toString());
+        txtNombreEquipoMant.setText("N/A");
         txtLaboratorioModal.setText(tablaMantenimiento.getValueAt(filaSeleccionada, 3).toString());
         cmbTipoMantModal.setSelectedItem(tablaMantenimiento.getValueAt(filaSeleccionada, 4).toString());
         try {
@@ -1532,7 +1906,10 @@ public class Mantenimiento extends javax.swing.JFrame {
         cmbCodigoEquipo.setEnabled(false);
         cmbCodigoEquipo.setForeground(COLOR_TEXTO);
 
+        ocultarCampoNombreEquipo();
+
         addMantenimiento.pack();
+        addMantenimiento.setSize(561, 535);
         addMantenimiento.setLocationRelativeTo(this);
         addMantenimiento.setVisible(true);
     }//GEN-LAST:event_btnEditarActionPerformed
@@ -1544,6 +1921,10 @@ public class Mantenimiento extends javax.swing.JFrame {
         ventanaReporteFalla.setLocationRelativeTo(null);
         this.dispose();
     }//GEN-LAST:event_btnReporteFallasActionPerformed
+
+    private void btnExportarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarActionPerformed
+        exportarTablaMantenimientoExcel();
+    }//GEN-LAST:event_btnExportarActionPerformed
 
     public static void main(String args[]) {
         java.awt.EventQueue.invokeLater(() -> new Mantenimiento().setVisible(true));

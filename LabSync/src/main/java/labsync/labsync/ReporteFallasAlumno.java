@@ -10,8 +10,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.DayOfWeek;
-import java.util.Calendar;
 import javax.swing.BorderFactory;
 import javax.swing.JOptionPane;
 import javax.swing.table.DefaultTableModel;
@@ -39,6 +37,7 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
         configurarDateChooser();
         configurarFormulario();
+        LaboratoriosBD.cargarDisponibles(cmbLaboratorio, "Selecciona laboratorio");
         cargarReportesRecientes();
         setLocationRelativeTo(null);
     }
@@ -69,8 +68,8 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
 
     private void configurarFormulario() {
         dateFechaFalla.setMaxSelectableDate(java.sql.Date.valueOf(LocalDate.now()));
-        dateFechaFalla.getJCalendar().getDayChooser().addDateEvaluator(new EvaluadorSabados());
-        dateFechaFalla.setDate(java.sql.Date.valueOf(LocalDate.now()));
+        ValidacionFechas.bloquearFinesDeSemana(dateFechaFalla);
+        dateFechaFalla.setDate(ValidacionFechas.anteriorDiaHabil(new java.util.Date()));
         txtEquipo.setText("");
         txtEquipo.setToolTipText(PH_EQUIPO);
         txtDescripcion.setText("");
@@ -144,18 +143,15 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
             return false;
         }
         if (dateFechaFalla.getDate() == null) {
-            JOptionPane.showMessageDialog(this, "Selecciona la fecha de la falla.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Selecciona la fecha del reporte.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
             return false;
         }
         LocalDate fecha = new java.sql.Date(dateFechaFalla.getDate().getTime()).toLocalDate();
         if (fecha.isAfter(LocalDate.now())) {
-            JOptionPane.showMessageDialog(this, "La fecha de la falla no puede estar en el futuro.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "La fecha del reporte no puede estar en el futuro.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
             return false;
         }
-        if (fecha.getDayOfWeek() == DayOfWeek.SATURDAY) {
-            JOptionPane.showMessageDialog(this, "No se pueden registrar fallas en sabado.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
-            return false;
-        }
+        if (!ValidacionFechas.validarDiaHabil(this, dateFechaFalla.getDate(), "registrar fallas")) return false;
         if (cmbTipoFalla.getSelectedIndex() <= 0) {
             JOptionPane.showMessageDialog(this, "Selecciona el tipo de falla.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
             return false;
@@ -186,17 +182,18 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
             LocalDate fecha = new java.sql.Date(dateFechaFalla.getDate().getTime()).toLocalDate();
             LocalTime hora = fecha.equals(LocalDate.now()) ? LocalTime.now() : LocalTime.NOON;
             String descripcion = "[Tipo: " + cmbTipoFalla.getSelectedItem() + "] " + txtDescripcion.getText().trim();
-            String sql = "INSERT INTO reporte_fallas (codigo_equipo, nombre_equipo, "
+            String sql = "INSERT INTO reporte_fallas (id_usuario, codigo_equipo, nombre_equipo, "
                 + "laboratorio, reportado_por, rol_reportante, descripcion_falla, estado, fecha_reporte) "
-                + "VALUES (?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
             try (PreparedStatement ps = con.prepareStatement(sql)) {
-                ps.setString(1, codigoEquipo);
-                ps.setNull(2, java.sql.Types.VARCHAR);
-                ps.setString(3, laboratorio);
-                ps.setString(4, usuario.nombreCompleto);
-                ps.setString(5, usuario.rol);
-                ps.setString(6, descripcion);
-                ps.setTimestamp(7, Timestamp.valueOf(fecha.atTime(hora)));
+                ps.setInt(1, usuario.idUsuario);
+                ps.setString(2, codigoEquipo);
+                ps.setNull(3, java.sql.Types.VARCHAR);
+                ps.setString(4, laboratorio);
+                ps.setString(5, usuario.nombreCompleto);
+                ps.setString(6, usuario.rol);
+                ps.setString(7, descripcion);
+                ps.setTimestamp(8, Timestamp.valueOf(fecha.atTime(hora)));
                 ps.executeUpdate();
             }
             JOptionPane.showMessageDialog(this, "El reporte fue enviado y quedo Pendiente de revision.",
@@ -209,12 +206,12 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
     }
 
     private DatosUsuario obtenerDatosUsuario(Connection con) throws SQLException {
-        String sql = "SELECT CONCAT_WS(' ', nombre, apellido_p, apellido_m) nombre_completo, rol "
+        String sql = "SELECT id, CONCAT_WS(' ', nombre, apellido_p, apellido_m) nombre_completo, rol "
             + "FROM usuario WHERE nombre = ? LIMIT 1";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, nombreUsuario);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return new DatosUsuario(rs.getString("nombre_completo"), rs.getString("rol"));
+                if (rs.next()) return new DatosUsuario(rs.getInt("id"), rs.getString("nombre_completo"), rs.getString("rol"));
             }
         }
         return null;
@@ -223,7 +220,7 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
     private void limpiarFormulario() {
         cmbLaboratorio.setSelectedIndex(0);
         txtEquipo.setText("");
-        dateFechaFalla.setDate(java.sql.Date.valueOf(LocalDate.now()));
+        dateFechaFalla.setDate(ValidacionFechas.anteriorDiaHabil(new java.util.Date()));
         cmbTipoFalla.setSelectedIndex(0);
         txtDescripcion.setText("");
     }
@@ -272,7 +269,6 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         DashboardAlumno dashboard = new DashboardAlumno(nombreUsuario);
         dashboard.setVisible(true);
         dispose();
-        dashboard.abrirMisReservas();
     }
 
     private void cerrarSesion() {
@@ -297,38 +293,10 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
     }
 
     private static class DatosUsuario {
-        final String nombreCompleto; final String rol;
-        DatosUsuario(String nombreCompleto, String rol) { this.nombreCompleto = nombreCompleto; this.rol = rol; }
-    }
-
-    private static class EvaluadorSabados implements com.toedter.calendar.IDateEvaluator {
-        @Override
-        public boolean isSpecial(java.util.Date date) { return false; }
-
-        @Override
-        public Color getSpecialForegroundColor() { return null; }
-
-        @Override
-        public Color getSpecialBackroundColor() { return null; }
-
-        @Override
-        public String getSpecialTooltip() { return null; }
-
-        @Override
-        public boolean isInvalid(java.util.Date date) {
-            Calendar calendario = Calendar.getInstance();
-            calendario.setTime(date);
-            return calendario.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY;
+        final int idUsuario; final String nombreCompleto; final String rol;
+        DatosUsuario(int idUsuario, String nombreCompleto, String rol) {
+            this.idUsuario = idUsuario; this.nombreCompleto = nombreCompleto; this.rol = rol;
         }
-
-        @Override
-        public Color getInvalidForegroundColor() { return Color.GRAY; }
-
-        @Override
-        public Color getInvalidBackroundColor() { return new Color(238, 238, 238); }
-
-        @Override
-        public String getInvalidTooltip() { return "No se permiten reportes en sabado"; }
     }
 
     @SuppressWarnings("unchecked")
@@ -469,7 +437,8 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         panelFormulario.add(lbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 65, -1, -1));
 
         cmbLaboratorio.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(
+            new String[] { "Selecciona laboratorio" }));
         panelFormulario.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 90, 270, 30));
 
         lbEquipo.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
@@ -484,7 +453,7 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
 
         lbFechaFalla.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbFechaFalla.setForeground(new java.awt.Color(102, 102, 102));
-        lbFechaFalla.setText("Fecha de falla");
+        lbFechaFalla.setText("Fecha del reporte");
         panelFormulario.add(lbFechaFalla, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 130, -1, -1));
 
         dateFechaFalla.setBackground(new java.awt.Color(255, 255, 255));
@@ -537,6 +506,7 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         panelContenedor.add(panelFormulario, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 95, 640, 500));
 
         panelGuia.setBackground(new java.awt.Color(255, 255, 255));
+        panelGuia.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(220, 220, 220)));
         panelGuia.setPreferredSize(new java.awt.Dimension(290, 205));
         panelGuia.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
 
@@ -547,18 +517,18 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
 
         lbGuia1.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         lbGuia1.setForeground(new java.awt.Color(102, 102, 102));
-        lbGuia1.setText("<html>1. Selecciona el laboratorio correcto.</html>");
-        panelGuia.add(lbGuia1, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 60, 240, 30));
+        lbGuia1.setText("<html>1. Selecciona laboratorio, código del equipo y fecha del reporte.</html>");
+        panelGuia.add(lbGuia1, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 55, 240, 42));
 
         lbGuia2.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         lbGuia2.setForeground(new java.awt.Color(102, 102, 102));
-        lbGuia2.setText("<html>2. Ingresa el código escolar del equipo.</html>");
-        panelGuia.add(lbGuia2, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 100, 240, 30));
+        lbGuia2.setText("<html>2. Elige el tipo y describe qué ocurrió y si impide utilizarlo.</html>");
+        panelGuia.add(lbGuia2, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 100, 240, 42));
 
         lbGuia3.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         lbGuia3.setForeground(new java.awt.Color(102, 102, 102));
-        lbGuia3.setText("<html>3. Describe la falla con el mayor detalle posible.</html>");
-        panelGuia.add(lbGuia3, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 140, 240, 40));
+        lbGuia3.setText("<html>3. Al enviar, tu usuario, rol y el estado Pendiente se registran automáticamente.</html>");
+        panelGuia.add(lbGuia3, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 145, 240, 48));
 
         panelContenedor.add(panelGuia, new org.netbeans.lib.awtextra.AbsoluteConstraints(705, 95, 290, 205));
 

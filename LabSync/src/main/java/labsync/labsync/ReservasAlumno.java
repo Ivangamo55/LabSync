@@ -8,10 +8,8 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import javax.swing.BorderFactory;
 import javax.swing.JOptionPane;
 import javax.swing.table.DefaultTableModel;
@@ -24,9 +22,6 @@ import javax.swing.table.DefaultTableModel;
 public class ReservasAlumno extends javax.swing.JFrame {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(ReservasAlumno.class.getName());
-    private static final String[] LABORATORIOS = {
-        "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03"
-    };
     private String nombreUsuario;
 
     public ReservasAlumno() {
@@ -67,10 +62,22 @@ public class ReservasAlumno extends javax.swing.JFrame {
         dateFechaReserva.getCalendarButton().setForeground(new Color(51, 51, 51));
     }
 
+
+    private void configurarCursorBotones() {
+        java.awt.Cursor cursorManita = new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR);
+
+        btnReservas.setCursor(cursorManita);
+        btnMisReservas.setCursor(cursorManita);
+        btnReporteFallas.setCursor(cursorManita);
+        btnCerrarSesion.setCursor(cursorManita);
+        btnBuscarDisponibilidad.setCursor(cursorManita);
+        btnSolicitarReserva.setCursor(cursorManita);
+    }
+
     private void configurarFormulario() {
         dateFechaReserva.setMinSelectableDate(Date.valueOf(LocalDate.now()));
-        dateFechaReserva.getJCalendar().getDayChooser().addDateEvaluator(new EvaluadorDiasClase());
-        dateFechaReserva.setDate(Date.valueOf(siguienteDiaDeClase(LocalDate.now())));
+        ValidacionFechas.bloquearFinesDeSemana(dateFechaReserva);
+        dateFechaReserva.setDate(ValidacionFechas.siguienteDiaHabil(new java.util.Date()));
         txtResumenLaboratorio.setText("");
         txtResumenFecha.setText("");
         txtResumenHorario.setText("");
@@ -81,9 +88,11 @@ public class ReservasAlumno extends javax.swing.JFrame {
         btnMisReservas.addActionListener(this::btnMisReservasActionPerformed);
         btnReporteFallas.addActionListener(event -> abrirReporteFallas());
 
+        configurarCursorBotones();
+
         tablaDisponibilidad.setModel(new DefaultTableModel(
             new Object[][]{},
-            new String[]{"Laboratorio", "Horario", "Capacidad", "Estado", "Accion"}
+            new String[]{"Laboratorio", "Horario", "Disponibles", "Estado", "Accion"}
         ) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -98,6 +107,8 @@ public class ReservasAlumno extends javax.swing.JFrame {
         cmbHorario.addActionListener(event -> limpiarResumen());
         cmbLaboratorio.addActionListener(event -> limpiarResumen());
         dateFechaReserva.addPropertyChangeListener("date", event -> limpiarResumen());
+
+        cargarLaboratoriosDesdeBD();
     }
 
     private boolean validarBusqueda() {
@@ -110,10 +121,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(this, "La fecha de la reserva no puede estar en el pasado.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
             return false;
         }
-        if (esFinDeSemana(fecha)) {
-            JOptionPane.showMessageDialog(this, "No se pueden realizar reservas en sabado o domingo porque no hay clases.", "Dia sin clases", JOptionPane.WARNING_MESSAGE);
-            return false;
-        }
+        if (!ValidacionFechas.validarDiaHabil(this, dateFechaReserva.getDate(), "realizar reservas")) return false;
         if (cmbHorario.getSelectedIndex() <= 0) {
             JOptionPane.showMessageDialog(this, "Selecciona un horario.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
             return false;
@@ -121,62 +129,31 @@ public class ReservasAlumno extends javax.swing.JFrame {
         return true;
     }
 
-    private static boolean esFinDeSemana(LocalDate fecha) {
-        DayOfWeek dia = fecha.getDayOfWeek();
-        return dia == DayOfWeek.SATURDAY || dia == DayOfWeek.SUNDAY;
-    }
+    private void cargarLaboratoriosDesdeBD() {
+        cmbLaboratorio.removeAllItems();
+        cmbLaboratorio.addItem("Selecciona laboratorio");
 
-    private static LocalDate siguienteDiaDeClase(LocalDate fecha) {
-        LocalDate siguiente = fecha;
-        while (esFinDeSemana(siguiente)) {
-            siguiente = siguiente.plusDays(1);
-        }
-        return siguiente;
-    }
+        String sql = "SELECT nombre "
+            + "FROM laboratorios "
+            + "WHERE estado = 'Disponible' "
+            + "ORDER BY nombre ASC";
 
-    private static class EvaluadorDiasClase implements com.toedter.calendar.IDateEvaluator {
+        try (Connection con = ConexionBD.conectar()) {
+            if (con == null) {
+                mostrarErrorConexion();
+                return;
+            }
 
-        @Override
-        public boolean isSpecial(java.util.Date date) {
-            return false;
-        }
+            try (PreparedStatement ps = con.prepareStatement(sql);
+                 ResultSet rs = ps.executeQuery()) {
 
-        @Override
-        public Color getSpecialForegroundColor() {
-            return null;
-        }
+                while (rs.next()) {
+                    cmbLaboratorio.addItem(rs.getString("nombre"));
+                }
+            }
 
-        @Override
-        public Color getSpecialBackroundColor() {
-            return null;
-        }
-
-        @Override
-        public String getSpecialTooltip() {
-            return null;
-        }
-
-        @Override
-        public boolean isInvalid(java.util.Date date) {
-            Calendar calendario = Calendar.getInstance();
-            calendario.setTime(date);
-            int dia = calendario.get(Calendar.DAY_OF_WEEK);
-            return dia == Calendar.SATURDAY || dia == Calendar.SUNDAY;
-        }
-
-        @Override
-        public Color getInvalidForegroundColor() {
-            return Color.GRAY;
-        }
-
-        @Override
-        public Color getInvalidBackroundColor() {
-            return new Color(238, 238, 238);
-        }
-
-        @Override
-        public String getInvalidTooltip() {
-            return "Sin clases: no se permiten reservas en fin de semana";
+        } catch (SQLException ex) {
+            mostrarErrorSQL("No se pudieron cargar los laboratorios", ex);
         }
     }
 
@@ -191,35 +168,88 @@ public class ReservasAlumno extends javax.swing.JFrame {
 
         Date fecha = new Date(dateFechaReserva.getDate().getTime());
         String horario = cmbHorario.getSelectedItem().toString();
-        String laboratorio = cmbLaboratorio.getSelectedIndex() > 0
-            ? cmbLaboratorio.getSelectedItem().toString() : "";
-        String[] laboratorios = laboratorio.isEmpty() ? LABORATORIOS : new String[]{laboratorio};
-        String sql = "SELECT EXISTS (SELECT 1 FROM reservas WHERE laboratorio = ? "
-            + "AND fecha = ? AND horario = ? AND estado IN ('Pendiente','Aprobada')) AS ocupado";
+
+        String laboratorioSeleccionado = cmbLaboratorio.getSelectedIndex() > 0
+            ? cmbLaboratorio.getSelectedItem().toString()
+            : "";
+
+        String sqlLaboratorios = "SELECT nombre, total_equipos "
+            + "FROM laboratorios "
+            + "WHERE estado = 'Disponible' ";
+
+        java.util.ArrayList<String> parametrosLaboratorios = new java.util.ArrayList<>();
+
+        if (!laboratorioSeleccionado.isEmpty()) {
+            sqlLaboratorios += "AND nombre = ? ";
+            parametrosLaboratorios.add(laboratorioSeleccionado);
+        }
+
+        sqlLaboratorios += "ORDER BY nombre ASC";
+
+        String sqlReservas = "SELECT COUNT(*) AS total "
+            + "FROM reservas "
+            + "WHERE laboratorio = ? "
+            + "AND fecha = ? "
+            + "AND horario = ? "
+            + "AND estado IN ('Pendiente', 'Aprobada')";
 
         try (Connection con = ConexionBD.conectar()) {
             if (con == null) {
                 mostrarErrorConexion();
                 return;
             }
-            try (PreparedStatement ps = con.prepareStatement(sql)) {
-                for (String laboratorioActual : laboratorios) {
-                    ps.setString(1, laboratorioActual);
-                    ps.setDate(2, fecha);
-                    ps.setString(3, horario);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        rs.next();
-                        String estado = rs.getBoolean("ocupado") ? "Ocupado" : "Disponible";
+
+            try (PreparedStatement psLaboratorios = con.prepareStatement(sqlLaboratorios)) {
+                for (int i = 0; i < parametrosLaboratorios.size(); i++) {
+                    psLaboratorios.setString(i + 1, parametrosLaboratorios.get(i));
+                }
+
+                try (ResultSet rsLaboratorios = psLaboratorios.executeQuery()) {
+                    while (rsLaboratorios.next()) {
+                        String laboratorioActual = rsLaboratorios.getString("nombre");
+                        int totalEquipos = rsLaboratorios.getInt("total_equipos");
+                        int reservasActivas = 0;
+
+                        try (PreparedStatement psReservas = con.prepareStatement(sqlReservas)) {
+                            psReservas.setString(1, laboratorioActual);
+                            psReservas.setDate(2, fecha);
+                            psReservas.setString(3, horario);
+
+                            try (ResultSet rsReservas = psReservas.executeQuery()) {
+                                if (rsReservas.next()) {
+                                    reservasActivas = rsReservas.getInt("total");
+                                }
+                            }
+                        }
+
+                        int equiposDisponibles = totalEquipos - reservasActivas;
+
+                        if (equiposDisponibles < 0) {
+                            equiposDisponibles = 0;
+                        }
+
+                        String estado = equiposDisponibles > 0 ? "Disponible" : "Ocupado";
+
                         modelo.addRow(new Object[]{
-                            laboratorioActual, horario, capacidadLaboratorio(laboratorioActual), estado,
-                            "Disponible".equals(estado) ? "Seleccionar" : "--"
+                            laboratorioActual,
+                            horario,
+                            equiposDisponibles,
+                            estado,
+                            equiposDisponibles > 0 ? "Seleccionar" : "--"
                         });
                     }
                 }
             }
+
             if (modelo.getRowCount() == 0) {
-                JOptionPane.showMessageDialog(this, "No se encontraron laboratorios con ese filtro.", "Sin resultados", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(
+                    this,
+                    "No se encontraron laboratorios con ese filtro.",
+                    "Sin resultados",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
             }
+
         } catch (SQLException ex) {
             mostrarErrorSQL("No se pudo consultar la disponibilidad", ex);
         }
@@ -245,18 +275,50 @@ public class ReservasAlumno extends javax.swing.JFrame {
         btnSolicitarReserva.setEnabled(true);
     }
 
+
+    private boolean usuarioTieneReservaActiva(Connection con, DatosUsuario usuario) throws SQLException {
+        String sql = "SELECT id_reserva "
+            + "FROM reservas "
+            + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ? AND rol_solicitante = ?)) "
+            + "AND estado NOT IN ('Cancelada', 'Finalizada', 'Rechazada') "
+            + "LIMIT 1";
+
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, usuario.idUsuario);
+            ps.setString(2, usuario.nombreCompleto);
+            ps.setString(3, usuario.rol);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
     private void solicitarReserva() {
         String actividad = txtActividad.getText().trim();
+
         if (txtResumenLaboratorio.getText().isBlank()) {
-            JOptionPane.showMessageDialog(this, "Selecciona un laboratorio disponible de la tabla.", "Seleccion requerida", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(
+                this,
+                "Selecciona un laboratorio disponible de la tabla.",
+                "Seleccion requerida",
+                JOptionPane.WARNING_MESSAGE
+            );
             return;
         }
+
         if (actividad.isBlank()) {
-            JOptionPane.showMessageDialog(this, "Escribe la actividad o motivo de la reserva.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(
+                this,
+                "Escribe la actividad o motivo de la reserva.",
+                "Dato requerido",
+                JOptionPane.WARNING_MESSAGE
+            );
             return;
         }
 
         Connection con = ConexionBD.conectar();
+
         if (con == null) {
             mostrarErrorConexion();
             return;
@@ -264,58 +326,133 @@ public class ReservasAlumno extends javax.swing.JFrame {
 
         try (con) {
             con.setAutoCommit(false);
+
             DatosUsuario usuario = obtenerDatosUsuario(con);
+
             if (usuario == null) {
                 throw new SQLException("No se encontro el usuario que inicio sesion.");
+            }
+
+            if (usuarioTieneReservaActiva(con, usuario)) {
+                con.rollback();
+
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Ya tienes una reservacion registrada. Solo puedes tener una reservacion a la vez.\n"
+                        + "Podras solicitar otra cuando tu reservacion actual este cancelada o terminada.",
+                    "Reservacion existente",
+                    JOptionPane.WARNING_MESSAGE
+                );
+
+                return;
             }
 
             String laboratorio = txtResumenLaboratorio.getText();
             String horario = txtResumenHorario.getText();
             Date fecha = Date.valueOf(txtResumenFecha.getText());
-            String sqlOcupada = "SELECT id_reserva FROM reservas WHERE laboratorio = ? AND fecha = ? "
-                + "AND horario = ? AND estado IN ('Pendiente','Aprobada') LIMIT 1 FOR UPDATE";
-            try (PreparedStatement ps = con.prepareStatement(sqlOcupada)) {
+
+            String sqlTotalEquipos = "SELECT total_equipos "
+                + "FROM laboratorios "
+                + "WHERE nombre = ? "
+                + "AND estado = 'Disponible' "
+                + "FOR UPDATE";
+
+            String sqlReservasActivas = "SELECT id_reserva "
+                + "FROM reservas "
+                + "WHERE laboratorio = ? "
+                + "AND fecha = ? "
+                + "AND horario = ? "
+                + "AND estado IN ('Pendiente', 'Aprobada') "
+                + "FOR UPDATE";
+
+            int totalEquipos = 0;
+            int reservasActivas = 0;
+
+            try (PreparedStatement ps = con.prepareStatement(sqlTotalEquipos)) {
                 ps.setString(1, laboratorio);
-                ps.setDate(2, fecha);
-                ps.setString(3, horario);
+
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
+                        totalEquipos = rs.getInt("total_equipos");
+                    } else {
                         con.rollback();
-                        JOptionPane.showMessageDialog(this, "El laboratorio acaba de ser ocupado. Actualiza la disponibilidad.", "Horario no disponible", JOptionPane.WARNING_MESSAGE);
+                        JOptionPane.showMessageDialog(
+                            this,
+                            "El laboratorio seleccionado no esta registrado o no esta disponible.",
+                            "Laboratorio no disponible",
+                            JOptionPane.WARNING_MESSAGE
+                        );
                         buscarDisponibilidad();
                         return;
                     }
                 }
             }
 
-            String sqlInsert = "INSERT INTO reservas (nombre_solicitante, rol_solicitante, "
+            try (PreparedStatement ps = con.prepareStatement(sqlReservasActivas)) {
+                ps.setString(1, laboratorio);
+                ps.setDate(2, fecha);
+                ps.setString(3, horario);
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        reservasActivas++;
+                    }
+                }
+            }
+
+            if (reservasActivas >= totalEquipos) {
+                con.rollback();
+
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Ya no hay equipos disponibles en este laboratorio para ese horario.",
+                    "Sin disponibilidad",
+                    JOptionPane.WARNING_MESSAGE
+                );
+
+                buscarDisponibilidad();
+                return;
+            }
+
+            String sqlInsert = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, "
                 + "laboratorio, actividad, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) "
-                + "VALUES (?, ?, ?, ?, 'N/A', 'N/A', ?, ?, ?, 1, 'Pendiente', NULL)";
+                + "VALUES (?, ?, ?, ?, ?, 'N/A', 'N/A', ?, ?, ?, 1, 'Pendiente', NULL)";
+
             try (PreparedStatement ps = con.prepareStatement(sqlInsert)) {
-                ps.setString(1, usuario.nombreCompleto);
-                ps.setString(2, usuario.rol);
-                ps.setString(3, laboratorio);
-                ps.setString(4, actividad);
-                ps.setString(5, usuario.turno);
-                ps.setDate(6, fecha);
-                ps.setString(7, horario);
+                ps.setInt(1, usuario.idUsuario);
+                ps.setString(2, usuario.nombreCompleto);
+                ps.setString(3, usuario.rol);
+                ps.setString(4, laboratorio);
+                ps.setString(5, actividad);
+                ps.setString(6, usuario.turno);
+                ps.setDate(7, fecha);
+                ps.setString(8, horario);
                 ps.executeUpdate();
             }
+
             con.commit();
-            JOptionPane.showMessageDialog(this, "La reserva fue enviada y quedo Pendiente de aprobacion.", "Reserva registrada", JOptionPane.INFORMATION_MESSAGE);
-            txtActividad.setText("");
-            buscarDisponibilidad();
+
+            JOptionPane.showMessageDialog(
+                this,
+                "La reserva fue enviada y quedo Pendiente de aprobacion.",
+                "Reserva registrada",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+
+            limpiarFormularioDespuesRegistro();
+
         } catch (SQLException ex) {
             try {
                 con.rollback();
             } catch (SQLException ignored) {
             }
+
             mostrarErrorSQL("No se pudo registrar la reserva", ex);
         }
     }
 
     private DatosUsuario obtenerDatosUsuario(Connection con) throws SQLException {
-        String sql = "SELECT CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) AS nombre_completo, "
+        String sql = "SELECT u.id, CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) AS nombre_completo, "
             + "u.rol, COALESCE(e.turno, 'No especificado') AS turno FROM usuario u "
             + "LEFT JOIN estudiante e ON e.id_usuario = u.id "
             + "WHERE u.nombre = ? LIMIT 1";
@@ -323,11 +460,35 @@ public class ReservasAlumno extends javax.swing.JFrame {
             ps.setString(1, nombreUsuario);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return new DatosUsuario(rs.getString("nombre_completo"), rs.getString("rol"), rs.getString("turno"));
+                    return new DatosUsuario(rs.getInt("id"), rs.getString("nombre_completo"), rs.getString("rol"), rs.getString("turno"));
                 }
             }
         }
         return null;
+    }
+
+
+    private void limpiarFormularioDespuesRegistro() {
+        txtActividad.setText("");
+
+        if (cmbHorario.getItemCount() > 0) {
+            cmbHorario.setSelectedIndex(0);
+        }
+
+        if (cmbLaboratorio.getItemCount() > 0) {
+            cmbLaboratorio.setSelectedIndex(0);
+        }
+
+        dateFechaReserva.setDate(ValidacionFechas.siguienteDiaHabil(new java.util.Date()));
+
+        limpiarResumen();
+        limpiarTablaDisponibilidad();
+    }
+
+    private void limpiarTablaDisponibilidad() {
+        DefaultTableModel modelo = (DefaultTableModel) tablaDisponibilidad.getModel();
+        modelo.setRowCount(0);
+        tablaDisponibilidad.clearSelection();
     }
 
     private void limpiarResumen() {
@@ -353,11 +514,13 @@ public class ReservasAlumno extends javax.swing.JFrame {
     }
 
     private static class DatosUsuario {
+        final int idUsuario;
         final String nombreCompleto;
         final String rol;
         final String turno;
 
-        DatosUsuario(String nombreCompleto, String rol, String turno) {
+        DatosUsuario(int idUsuario, String nombreCompleto, String rol, String turno) {
+            this.idUsuario = idUsuario;
             this.nombreCompleto = nombreCompleto;
             this.rol = rol;
             this.turno = turno;
@@ -391,6 +554,11 @@ public class ReservasAlumno extends javax.swing.JFrame {
         lbActividad = new javax.swing.JLabel();
         txtActividad = new javax.swing.JTextField();
         btnBuscarDisponibilidad = new javax.swing.JButton();
+        panelGuia = new javax.swing.JPanel();
+        lbTituloGuia = new javax.swing.JLabel();
+        lbGuia1 = new javax.swing.JLabel();
+        lbGuia2 = new javax.swing.JLabel();
+        lbGuia3 = new javax.swing.JLabel();
         panelResultados = new javax.swing.JPanel();
         lbTituloResultados = new javax.swing.JLabel();
         jScrollPaneTabla = new javax.swing.JScrollPane();
@@ -490,7 +658,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
         panelContenedor.add(lbSubtituloPantalla, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 58, -1, -1));
 
         panelFormulario.setBackground(new java.awt.Color(255, 255, 255));
-        panelFormulario.setPreferredSize(new java.awt.Dimension(960, 220));
+        panelFormulario.setPreferredSize(new java.awt.Dimension(650, 220));
         panelFormulario.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
 
         lbTituloFormulario.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
@@ -508,25 +676,25 @@ public class ReservasAlumno extends javax.swing.JFrame {
         dateFechaReserva.setForeground(new java.awt.Color(51, 51, 51));
         dateFechaReserva.setDateFormatString("yyyy-MM-dd");
         dateFechaReserva.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        panelFormulario.add(dateFechaReserva, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 90, 210, 30));
+        panelFormulario.add(dateFechaReserva, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 90, 175, 30));
 
         lbHorario.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbHorario.setForeground(new java.awt.Color(102, 102, 102));
         lbHorario.setText("Horario");
-        panelFormulario.add(lbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(265, 65, -1, -1));
+        panelFormulario.add(lbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 65, -1, -1));
 
         cmbHorario.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
         cmbHorario.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona horario", "7:00 - 7:50", "7:50 - 8:40", "9:10 - 10:00", "10:00 - 10:50", "10:50 - 11:40", "11:40 - 12:30", "12:30 - 13:20", "13:20 - 14:10", "14:10 - 15:00", "15:00 - 15:50", "15:50 - 16:40", "16:40 - 17:30", "18:00 - 18:50", "18:50 - 19:40", "19:40 - 20:30" }));
-        panelFormulario.add(cmbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(265, 90, 210, 30));
+        panelFormulario.add(cmbHorario, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 90, 175, 30));
 
         lbLaboratorio.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbLaboratorio.setForeground(new java.awt.Color(102, 102, 102));
         lbLaboratorio.setText("Laboratorio");
-        panelFormulario.add(lbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(505, 65, -1, -1));
+        panelFormulario.add(lbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(415, 65, -1, -1));
 
         cmbLaboratorio.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio", "PB-05", "M-11", "M-12", "M-13" }));
-        panelFormulario.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(505, 90, 210, 30));
+        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio" }));
+        panelFormulario.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(415, 90, 210, 30));
 
         lbActividad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbActividad.setForeground(new java.awt.Color(102, 102, 102));
@@ -537,7 +705,7 @@ public class ReservasAlumno extends javax.swing.JFrame {
         txtActividad.setForeground(new java.awt.Color(51, 51, 51));
         txtActividad.setText("Ej. práctica, proyecto, exposición...");
         txtActividad.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
-        panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 165, 690, 30));
+        panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 165, 380, 30));
 
         btnBuscarDisponibilidad.setBackground(new java.awt.Color(8, 173, 141));
         btnBuscarDisponibilidad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
@@ -546,9 +714,36 @@ public class ReservasAlumno extends javax.swing.JFrame {
         btnBuscarDisponibilidad.setBorderPainted(false);
         btnBuscarDisponibilidad.setFocusPainted(false);
         btnBuscarDisponibilidad.addActionListener(this::btnBuscarDisponibilidadActionPerformed);
-        panelFormulario.add(btnBuscarDisponibilidad, new org.netbeans.lib.awtextra.AbsoluteConstraints(745, 165, 190, 30));
+        panelFormulario.add(btnBuscarDisponibilidad, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 165, 195, 30));
 
-        panelContenedor.add(panelFormulario, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 95, 960, 220));
+        panelContenedor.add(panelFormulario, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 95, 650, 220));
+
+        panelGuia.setBackground(new java.awt.Color(255, 255, 255));
+        panelGuia.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(220, 220, 220)));
+        panelGuia.setPreferredSize(new java.awt.Dimension(290, 220));
+        panelGuia.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        lbTituloGuia.setFont(new java.awt.Font("Arial", 1, 18)); // NOI18N
+        lbTituloGuia.setForeground(new java.awt.Color(102, 102, 102));
+        lbTituloGuia.setText("Guía rápida");
+        panelGuia.add(lbTituloGuia, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 18, 220, 26));
+
+        lbGuia1.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        lbGuia1.setForeground(new java.awt.Color(102, 102, 102));
+        lbGuia1.setText("<html>1. Selecciona fecha, horario y un laboratorio disponible.</html>");
+        panelGuia.add(lbGuia1, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 55, 240, 42));
+
+        lbGuia2.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        lbGuia2.setForeground(new java.awt.Color(102, 102, 102));
+        lbGuia2.setText("<html>2. Escribe la actividad y pulsa Buscar disponibilidad.</html>");
+        panelGuia.add(lbGuia2, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 100, 240, 42));
+
+        lbGuia3.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
+        lbGuia3.setForeground(new java.awt.Color(102, 102, 102));
+        lbGuia3.setText("<html>3. Elige una fila y solicita. Tu usuario, turno y el estado Pendiente se guardan automáticamente.</html>");
+        panelGuia.add(lbGuia3, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 145, 240, 62));
+
+        panelContenedor.add(panelGuia, new org.netbeans.lib.awtextra.AbsoluteConstraints(705, 95, 290, 220));
 
         panelResultados.setBackground(new java.awt.Color(255, 255, 255));
         panelResultados.setPreferredSize(new java.awt.Dimension(625, 255));
@@ -660,11 +855,12 @@ public class ReservasAlumno extends javax.swing.JFrame {
     }
 
     private void btnCerrarSesionActionPerformed(java.awt.event.ActionEvent evt) {
-        int opcion = JOptionPane.showConfirmDialog(this, "Deseas cerrar sesion?", "Cerrar sesion", JOptionPane.YES_NO_OPTION);
+        int opcion = JOptionPane.showConfirmDialog(this, "¿Deseas cerrar sesion?", "Cerrar sesion", JOptionPane.YES_NO_OPTION);
         if (opcion == JOptionPane.YES_OPTION) {
             Login login = new Login();
-            login.setLocationRelativeTo(null);
+            
             login.setVisible(true);
+            login.setLocationRelativeTo(null);
             dispose();
         }
     }
@@ -712,6 +908,9 @@ public class ReservasAlumno extends javax.swing.JFrame {
     private javax.swing.JScrollPane jScrollPaneTabla;
     private javax.swing.JLabel lbActividad;
     private javax.swing.JLabel lbFecha;
+    private javax.swing.JLabel lbGuia1;
+    private javax.swing.JLabel lbGuia2;
+    private javax.swing.JLabel lbGuia3;
     private javax.swing.JLabel lbHorario;
     private javax.swing.JLabel lbLaboratorio;
     private javax.swing.JLabel lbNombreUsuario;
@@ -720,11 +919,13 @@ public class ReservasAlumno extends javax.swing.JFrame {
     private javax.swing.JLabel lbResumenLaboratorio;
     private javax.swing.JLabel lbSubtituloPantalla;
     private javax.swing.JLabel lbTituloFormulario;
+    private javax.swing.JLabel lbTituloGuia;
     private javax.swing.JLabel lbTituloPantalla;
     private javax.swing.JLabel lbTituloResultados;
     private javax.swing.JLabel lbTituloResumen;
     private javax.swing.JPanel panelContenedor;
     private javax.swing.JPanel panelFormulario;
+    private javax.swing.JPanel panelGuia;
     private javax.swing.JPanel panelResultados;
     private javax.swing.JPanel panelResumen;
     private javax.swing.JPanel sidebarVerde;
