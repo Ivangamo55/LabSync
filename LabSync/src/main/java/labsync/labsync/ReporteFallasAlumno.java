@@ -10,8 +10,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.DayOfWeek;
-import java.util.Calendar;
 import javax.swing.BorderFactory;
 import javax.swing.JOptionPane;
 import javax.swing.table.DefaultTableModel;
@@ -69,8 +67,8 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
 
     private void configurarFormulario() {
         dateFechaFalla.setMaxSelectableDate(java.sql.Date.valueOf(LocalDate.now()));
-        dateFechaFalla.getJCalendar().getDayChooser().addDateEvaluator(new EvaluadorSabados());
-        dateFechaFalla.setDate(java.sql.Date.valueOf(LocalDate.now()));
+        ValidacionFechas.bloquearFinesDeSemana(dateFechaFalla);
+        dateFechaFalla.setDate(ValidacionFechas.anteriorDiaHabil(new java.util.Date()));
         txtEquipo.setText("");
         txtEquipo.setToolTipText(PH_EQUIPO);
         txtDescripcion.setText("");
@@ -152,10 +150,7 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(this, "La fecha de la falla no puede estar en el futuro.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
             return false;
         }
-        if (fecha.getDayOfWeek() == DayOfWeek.SATURDAY) {
-            JOptionPane.showMessageDialog(this, "No se pueden registrar fallas en sabado.", "Fecha no valida", JOptionPane.WARNING_MESSAGE);
-            return false;
-        }
+        if (!ValidacionFechas.validarDiaHabil(this, dateFechaFalla.getDate(), "registrar fallas")) return false;
         if (cmbTipoFalla.getSelectedIndex() <= 0) {
             JOptionPane.showMessageDialog(this, "Selecciona el tipo de falla.", "Dato requerido", JOptionPane.WARNING_MESSAGE);
             return false;
@@ -223,7 +218,7 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
     private void limpiarFormulario() {
         cmbLaboratorio.setSelectedIndex(0);
         txtEquipo.setText("");
-        dateFechaFalla.setDate(java.sql.Date.valueOf(LocalDate.now()));
+        dateFechaFalla.setDate(ValidacionFechas.anteriorDiaHabil(new java.util.Date()));
         cmbTipoFalla.setSelectedIndex(0);
         txtDescripcion.setText("");
     }
@@ -272,7 +267,6 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         DashboardAlumno dashboard = new DashboardAlumno(nombreUsuario);
         dashboard.setVisible(true);
         dispose();
-        dashboard.abrirMisReservas();
     }
 
     private void cerrarSesion() {
@@ -299,36 +293,6 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
     private static class DatosUsuario {
         final String nombreCompleto; final String rol;
         DatosUsuario(String nombreCompleto, String rol) { this.nombreCompleto = nombreCompleto; this.rol = rol; }
-    }
-
-    private static class EvaluadorSabados implements com.toedter.calendar.IDateEvaluator {
-        @Override
-        public boolean isSpecial(java.util.Date date) { return false; }
-
-        @Override
-        public Color getSpecialForegroundColor() { return null; }
-
-        @Override
-        public Color getSpecialBackroundColor() { return null; }
-
-        @Override
-        public String getSpecialTooltip() { return null; }
-
-        @Override
-        public boolean isInvalid(java.util.Date date) {
-            Calendar calendario = Calendar.getInstance();
-            calendario.setTime(date);
-            return calendario.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY;
-        }
-
-        @Override
-        public Color getInvalidForegroundColor() { return Color.GRAY; }
-
-        @Override
-        public Color getInvalidBackroundColor() { return new Color(238, 238, 238); }
-
-        @Override
-        public String getInvalidTooltip() { return "No se permiten reportes en sabado"; }
     }
 
     @SuppressWarnings("unchecked")
@@ -469,7 +433,8 @@ public class ReporteFallasAlumno extends javax.swing.JFrame {
         panelFormulario.add(lbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 65, -1, -1));
 
         cmbLaboratorio.setFont(new java.awt.Font("Arial", 0, 12)); // NOI18N
-        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Selecciona laboratorio", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
+        cmbLaboratorio.setModel(new javax.swing.DefaultComboBoxModel(
+            new String[] { "Selecciona laboratorio", "PB-05", "M-11", "M-12", "M-13", "M-14", "M-02", "M-05", "5-06", "5-03" }));
         panelFormulario.add(cmbLaboratorio, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 90, 270, 30));
 
         lbEquipo.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N

@@ -2,6 +2,24 @@ package labsync.labsync;
 
 import java.awt.Color;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
+
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+
 public class Reserva extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(Reserva.class.getName());
@@ -402,6 +420,251 @@ public class Reserva extends javax.swing.JFrame {
                 con.close();
             } catch (java.sql.SQLException ex) {
                 
+            }
+        }
+    }
+    
+    private void exportarTablaReservasExcel() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Guardar reservas");
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Archivo Excel (*.xlsx)", "xlsx"));
+        fileChooser.setSelectedFile(new File("reservas_labsync.xlsx"));
+
+        int seleccion = fileChooser.showSaveDialog(this);
+
+        if (seleccion != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File archivo = fileChooser.getSelectedFile();
+
+        if (!archivo.getName().toLowerCase().endsWith(".xlsx")) {
+            archivo = new File(archivo.getAbsolutePath() + ".xlsx");
+        }
+
+        String textoBusqueda = txtBuscar.getText().trim();
+
+        if (textoBusqueda.equals(PH_BUSCAR)) {
+            textoBusqueda = "";
+        }
+
+        String laboratorioSeleccionado = cmbLaboratorio.getSelectedItem().toString();
+        String turnoSeleccionado = cmbTurno.getSelectedItem().toString();
+        String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
+
+        String sql = "SELECT "
+            + "id_reserva, "
+            + "DATE_FORMAT(fecha, '%d/%m/%Y') AS fecha, "
+            + "nombre_solicitante, "
+            + "rol_solicitante, "
+            + "laboratorio, "
+            + "actividad, "
+            + "grado, "
+            + "grupo, "
+            + "turno, "
+            + "horario, "
+            + "cantidad_alumnos, "
+            + "estado, "
+            + "IFNULL(observaciones, '') AS observaciones, "
+            + "DATE_FORMAT(fecha_registro, '%d/%m/%Y %H:%i:%s') AS fecha_registro "
+            + "FROM reservas "
+            + "WHERE 1=1 ";
+
+        java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
+
+        if (!textoBusqueda.isEmpty()) {
+            sql += "AND (nombre_solicitante LIKE ? "
+                + "OR rol_solicitante LIKE ? "
+                + "OR laboratorio LIKE ? "
+                + "OR actividad LIKE ? "
+                + "OR grupo LIKE ? "
+                + "OR estado LIKE ? "
+                + "OR DATE_FORMAT(fecha, '%d/%m/%Y') LIKE ? "
+                + "OR DATE_FORMAT(fecha, '%Y-%m-%d') LIKE ?) ";
+
+            String busqueda = "%" + textoBusqueda + "%";
+
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+            parametros.add(busqueda);
+        }
+
+        if (!laboratorioSeleccionado.equals("Todos")) {
+            sql += "AND laboratorio = ? ";
+            parametros.add(laboratorioSeleccionado);
+        }
+
+        if (!turnoSeleccionado.equals("Todos")) {
+            sql += "AND turno = ? ";
+            parametros.add(turnoSeleccionado);
+        }
+
+        if (!estadoSeleccionado.equals("Todos")) {
+            sql += "AND estado = ? ";
+            parametros.add(estadoSeleccionado);
+        } else {
+            sql += "AND estado NOT IN ('Finalizada', 'Cancelada') ";
+        }
+
+        sql += "ORDER BY fecha DESC";
+
+        java.sql.Connection con = ConexionBD.conectar();
+
+        if (con == null) {
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "No hay conexi\u00F3n con la base de datos.",
+                "Error de conexi\u00F3n",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        try (
+            Workbook workbook = new XSSFWorkbook();
+            FileOutputStream salida = new FileOutputStream(archivo)
+        ) {
+            Sheet hoja = workbook.createSheet("Reservas");
+
+            CellStyle estiloTitulo = workbook.createCellStyle();
+            Font fuenteTitulo = workbook.createFont();
+            fuenteTitulo.setBold(true);
+            fuenteTitulo.setFontHeightInPoints((short) 16);
+            estiloTitulo.setFont(fuenteTitulo);
+            estiloTitulo.setAlignment(HorizontalAlignment.CENTER);
+
+            CellStyle estiloEncabezado = workbook.createCellStyle();
+            Font fuenteEncabezado = workbook.createFont();
+            fuenteEncabezado.setBold(true);
+            fuenteEncabezado.setColor(IndexedColors.WHITE.getIndex());
+            estiloEncabezado.setFont(fuenteEncabezado);
+            estiloEncabezado.setFillForegroundColor(IndexedColors.GREEN.getIndex());
+            estiloEncabezado.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            estiloEncabezado.setAlignment(HorizontalAlignment.CENTER);
+            estiloEncabezado.setBorderTop(BorderStyle.THIN);
+            estiloEncabezado.setBorderBottom(BorderStyle.THIN);
+            estiloEncabezado.setBorderLeft(BorderStyle.THIN);
+            estiloEncabezado.setBorderRight(BorderStyle.THIN);
+
+            CellStyle estiloCelda = workbook.createCellStyle();
+            estiloCelda.setBorderTop(BorderStyle.THIN);
+            estiloCelda.setBorderBottom(BorderStyle.THIN);
+            estiloCelda.setBorderLeft(BorderStyle.THIN);
+            estiloCelda.setBorderRight(BorderStyle.THIN);
+
+            Row filaTitulo = hoja.createRow(0);
+            Cell celdaTitulo = filaTitulo.createCell(0);
+            celdaTitulo.setCellValue("Reporte de Reservas - LabSync");
+            celdaTitulo.setCellStyle(estiloTitulo);
+
+            hoja.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 12));
+
+            Row filaEncabezado = hoja.createRow(2);
+
+            String[] encabezados = {
+                "Fecha",
+                "Solicitante",
+                "Rol",
+                "Laboratorio",
+                "Actividad",
+                "Grado",
+                "Grupo",
+                "Turno",
+                "Horario",
+                "Cantidad Alumnos",
+                "Estado",
+                "Observaciones",
+                "Fecha Registro"
+            };
+
+            for (int i = 0; i < encabezados.length; i++) {
+                Cell celda = filaEncabezado.createCell(i);
+                celda.setCellValue(encabezados[i]);
+                celda.setCellStyle(estiloEncabezado);
+            }
+
+            java.sql.PreparedStatement ps = con.prepareStatement(sql);
+
+            for (int i = 0; i < parametros.size(); i++) {
+                ps.setString(i + 1, parametros.get(i));
+            }
+
+            java.sql.ResultSet rs = ps.executeQuery();
+
+            int filaExcel = 3;
+            int totalRegistros = 0;
+
+            while (rs.next()) {
+                Row fila = hoja.createRow(filaExcel);
+
+                Object[] datos = {
+                    rs.getString("fecha"),
+                    rs.getString("nombre_solicitante"),
+                    rs.getString("rol_solicitante"),
+                    rs.getString("laboratorio"),
+                    rs.getString("actividad"),
+                    rs.getString("grado"),
+                    rs.getString("grupo"),
+                    rs.getString("turno"),
+                    rs.getString("horario"),
+                    rs.getInt("cantidad_alumnos"),
+                    rs.getString("estado"),
+                    rs.getString("observaciones"),
+                    rs.getString("fecha_registro")
+                };
+
+                for (int col = 0; col < datos.length; col++) {
+                    Cell celda = fila.createCell(col);
+                    celda.setCellValue(datos[col] != null ? datos[col].toString() : "");
+                    celda.setCellStyle(estiloCelda);
+                }
+
+                filaExcel++;
+                totalRegistros++;
+            }
+
+            if (totalRegistros == 0) {
+                javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "No hay datos para exportar con los filtros actuales.",
+                    "Sin datos",
+                    javax.swing.JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
+
+            hoja.createFreezePane(0, 3);
+            hoja.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(2, filaExcel - 1, 0, encabezados.length - 1));
+
+            for (int col = 0; col < encabezados.length; col++) {
+                hoja.autoSizeColumn(col);
+            }
+
+            workbook.write(salida);
+
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "Las reservas se exportaron correctamente.",
+                "Exportaci\u00F3n exitosa",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE
+            );
+
+        } catch (Exception e) {
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "Error al exportar reservas: " + e.getMessage(),
+                "Error",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+        } finally {
+            try {
+                con.close();
+            } catch (java.sql.SQLException ex) {
             }
         }
     }
@@ -908,6 +1171,7 @@ public class Reserva extends javax.swing.JFrame {
         btnExportar.setBorderPainted(false);
         btnExportar.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnExportar.setFocusPainted(false);
+        btnExportar.addActionListener(this::btnExportarActionPerformed);
         body.add(btnExportar, new org.netbeans.lib.awtextra.AbsoluteConstraints(900, 500, 130, 40));
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
@@ -1143,6 +1407,10 @@ public class Reserva extends javax.swing.JFrame {
         ventanaReporte.setLocationRelativeTo(null);
         this.dispose();
     }//GEN-LAST:event_btnReporteFallasActionPerformed
+
+    private void btnExportarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarActionPerformed
+        exportarTablaReservasExcel();
+    }//GEN-LAST:event_btnExportarActionPerformed
 
     /**
      * @param args the command line arguments

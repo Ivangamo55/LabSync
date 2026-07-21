@@ -1,23 +1,14 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/GUIForms/JFrame.java to edit this template
- */
 package labsync.labsync;
 
-/**
- *
- * @author aleja
- */
 public class Login extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(Login.class.getName());
 
-    /**
-     * Creates new form Login
-     */
     public Login() {
         initComponents();
-        setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
+        setIconImage(Recursos.icono("/images/logo_labsync_no_background.png").getImage());
+        getRootPane().setDefaultButton(btnLogin);
+        setLocationRelativeTo(null);
     }
     
     // LÓGICA DE ENCRIPTACION CONTRASEÑA
@@ -70,7 +61,7 @@ public class Login extends javax.swing.JFrame {
         panelVerde.setBackground(new java.awt.Color(8, 173, 141));
         panelVerde.setMinimumSize(new java.awt.Dimension(400, 500));
 
-        imgUTJ.setIcon(new javax.swing.ImageIcon(getClass().getResource("/images/UTJ_blanco_vertical.png"))); // NOI18N
+        imgUTJ.setIcon(Recursos.icono("/images/UTJ_blanco_vertical.png")); // NOI18N
 
         lbLabSync.setBackground(new java.awt.Color(0, 0, 0));
         lbLabSync.setFont(new java.awt.Font("Segoe UI", 1, 36)); // NOI18N
@@ -146,7 +137,7 @@ public class Login extends javax.swing.JFrame {
         matricula.setName("matricula"); // NOI18N
         matricula.addActionListener(this::matriculaActionPerformed);
 
-        imgLabSync.setIcon(new javax.swing.ImageIcon(getClass().getResource("/images/labsync_200.png"))); // NOI18N
+        imgLabSync.setIcon(Recursos.icono("/images/labsync_200.png")); // NOI18N
 
         btnLogin.setBackground(new java.awt.Color(8, 173, 141));
         btnLogin.setFont(new java.awt.Font("Segoe UI", 1, 18)); // NOI18N
@@ -223,14 +214,17 @@ public class Login extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void passwordActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_passwordActionPerformed
-        // TODO add your handling code here:
+        btnLogin.doClick();
     }//GEN-LAST:event_passwordActionPerformed
 
     private void matriculaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_matriculaActionPerformed
-        // TODO add your handling code here:
+        btnLogin.doClick();
     }//GEN-LAST:event_matriculaActionPerformed
 
-
+    /*
+        BOTON DE INICIO DE SESIÓN
+        AQUI IRA LA LOGICA PARA EL INICIO DE SESION YA CONECTADA CON LA BD
+    */
     private void btnLoginActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnLoginActionPerformed
         String correo = matricula.getText().trim();
         String passwordStr = this.password.getText().trim();
@@ -250,7 +244,8 @@ public class Login extends javax.swing.JFrame {
         
         if (con != null) {
             try {
-                String sql = "SELECT nombre, rol FROM usuario WHERE correo = ? AND password = ?";
+                String sql = "SELECT id, nombre, CONCAT_WS(' ', nombre, apellido_p, apellido_m) nombre_completo, rol "
+                        + "FROM usuario WHERE correo = ? AND password = ?";
                 java.sql.PreparedStatement ps = con.prepareStatement(sql);
 
                 ps.setString(1, correo);
@@ -259,8 +254,11 @@ public class Login extends javax.swing.JFrame {
                 java.sql.ResultSet rs = ps.executeQuery();
 
                 if (rs.next()) {
+                    // int idUsuario = rs.getInt("id");
                     String strNombre = rs.getString("nombre");
                     String rolUsuario = rs.getString("rol").trim();
+                    SesionUsuario sesion = new SesionUsuario(
+                            rs.getInt("id"), strNombre, rs.getString("nombre_completo"), rolUsuario);
                     
                     javax.swing.JOptionPane.showMessageDialog(
                         this,
@@ -278,19 +276,17 @@ public class Login extends javax.swing.JFrame {
                         break;
                         
                         case "Profesor":
-                            javax.swing.JOptionPane.showMessageDialog(
-                                this,
-                                "INTERFAZ PROFESOR",
-                                "Redirección de Rol",
-                                javax.swing.JOptionPane.INFORMATION_MESSAGE
-                            );
+                            DashboardProfesor ventanaProfesor = new DashboardProfesor(sesion);
+                            ventanaProfesor.setLocationRelativeTo(null);
+                            ventanaProfesor.setVisible(true);
+                            this.dispose();
                         break;
                         
                         case "Laboratorista":                            
                             DashboardLabo ventanaLabo = new DashboardLabo(strNombre);
+                            ventanaLabo.setLocationRelativeTo(null);
                             ventanaLabo.setVisible(true);
                             this.dispose();
-                            ventanaLabo.setLocationRelativeTo(null);
                         break;
                         
                         case "Externo":
@@ -340,6 +336,7 @@ public class Login extends javax.swing.JFrame {
         }
     }//GEN-LAST:event_btnLoginActionPerformed
 
+    // BOTON DE INICIAR SESIÓN -> REGISTO 
     private void btnRegisterActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRegisterActionPerformed
         Register ventanaRegister = new Register();
         

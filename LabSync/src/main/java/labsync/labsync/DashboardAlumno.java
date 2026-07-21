@@ -34,7 +34,6 @@ public class DashboardAlumno extends javax.swing.JFrame {
 
     private void configurarNavegacion() {
         btnReservas.addActionListener(evt -> abrirReservas());
-        btnMisReservas.addActionListener(evt -> abrirMisReservas());
         btnReporteFallas.addActionListener(evt -> abrirReporteFallas());
         lbVerTodasReservas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         lbVerTodasReservas.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -46,9 +45,8 @@ public class DashboardAlumno extends javax.swing.JFrame {
     }
 
     /**
-     * Abre la vista de todas las reservas del alumno.
-     * Este es el punto unico de entrada para la opcion "Mis reservas",
-     * tanto desde el dashboard como desde la pantalla para reservar.
+     * Abre la tabla completa en un dialogo cuando el alumno pulsa el enlace
+     * verde "Ver todas mis reservas".
      */
     public void abrirMisReservas() {
         mostrarTodasReservas();
@@ -458,7 +456,7 @@ public class DashboardAlumno extends javax.swing.JFrame {
         // TODO add your handling code here:
         int confirmacion = javax.swing.JOptionPane.showConfirmDialog(
             this,
-            "¿Estás seguro que deseas cerrar sesión?",
+            "¿Deseas cerrar sesión?",
             "Cerrar Sesión",
             javax.swing.JOptionPane.YES_NO_OPTION,
             javax.swing.JOptionPane.WARNING_MESSAGE
