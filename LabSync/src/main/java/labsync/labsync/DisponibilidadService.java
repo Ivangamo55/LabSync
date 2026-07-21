@@ -76,8 +76,12 @@ public final class DisponibilidadService {
             return ResultadoDisponibilidad.noDisponible("El laboratorio no está disponible.", 0);
         }
         if (tieneMantenimientoActivo(conexion, laboratorio, fecha, bloquear)) {
-            return ResultadoDisponibilidad.noDisponible(
-                    "El laboratorio está bloqueado por mantenimiento para esa fecha.", 0);
+            return ResultadoDisponibilidad.noDisponiblePorMantenimiento(
+                    "El laboratorio está bloqueado por mantenimiento para esa fecha.");
+        }
+        if (tieneReporteEnRevision(conexion, laboratorio, bloquear)) {
+            return ResultadoDisponibilidad.noDisponiblePorMantenimiento(
+                    "El laboratorio no está disponible por mantenimiento: tiene un reporte de falla en revisión.");
         }
 
         Ocupacion ocupacion = consultarOcupacion(
@@ -121,6 +125,19 @@ public final class DisponibilidadService {
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setString(1, laboratorio);
             ps.setDate(2, Date.valueOf(fecha));
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private boolean tieneReporteEnRevision(
+            Connection conexion, String laboratorio, boolean bloquear) throws SQLException {
+        String sql = "SELECT id_falla FROM reporte_fallas "
+                + "WHERE laboratorio = ? AND estado = 'En revisión' "
+                + "LIMIT 1" + clausulaBloqueo(bloquear);
+        try (PreparedStatement ps = conexion.prepareStatement(sql)) {
+            ps.setString(1, laboratorio);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }
@@ -203,26 +220,35 @@ public final class DisponibilidadService {
         private final int equiposDisponibles;
         private final int capacidad;
         private final String mensaje;
+        private final boolean bloqueadoPorMantenimiento;
 
         private ResultadoDisponibilidad(
-                boolean disponible, int equiposDisponibles, int capacidad, String mensaje) {
+                boolean disponible, int equiposDisponibles, int capacidad, String mensaje,
+                boolean bloqueadoPorMantenimiento) {
             this.disponible = disponible;
             this.equiposDisponibles = equiposDisponibles;
             this.capacidad = capacidad;
             this.mensaje = mensaje;
+            this.bloqueadoPorMantenimiento = bloqueadoPorMantenimiento;
         }
 
         public static ResultadoDisponibilidad disponible(int equiposDisponibles, int capacidad) {
-            return new ResultadoDisponibilidad(true, equiposDisponibles, capacidad, "Disponible");
+            return new ResultadoDisponibilidad(
+                    true, equiposDisponibles, capacidad, "Disponible", false);
         }
 
         public static ResultadoDisponibilidad noDisponible(String mensaje, int capacidad) {
-            return new ResultadoDisponibilidad(false, 0, capacidad, mensaje);
+            return new ResultadoDisponibilidad(false, 0, capacidad, mensaje, false);
+        }
+
+        public static ResultadoDisponibilidad noDisponiblePorMantenimiento(String mensaje) {
+            return new ResultadoDisponibilidad(false, 0, 0, mensaje, true);
         }
 
         public boolean estaDisponible() { return disponible; }
         public int getEquiposDisponibles() { return equiposDisponibles; }
         public int getCapacidad() { return capacidad; }
         public String getMensaje() { return mensaje; }
+        public boolean estaBloqueadoPorMantenimiento() { return bloqueadoPorMantenimiento; }
     }
 }

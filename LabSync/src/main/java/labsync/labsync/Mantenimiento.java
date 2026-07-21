@@ -54,6 +54,31 @@ public class Mantenimiento extends javax.swing.JFrame {
         cargarCodigosEquipo();
         cargarTablaMantenimiento();
     }
+
+    /** Abre el formulario de alta preparado para resolver un aviso preventivo. */
+    public Mantenimiento(String nombreRecibido, String codigoEquipo) {
+        this(nombreRecibido);
+        javax.swing.SwingUtilities.invokeLater(() -> abrirRegistroParaEquipo(codigoEquipo));
+    }
+
+    private void abrirRegistroParaEquipo(String codigoEquipo) {
+        modoEdicion = false;
+        idMantenimientoSeleccionado = 0;
+        limpiarCampos();
+        cargarCodigosEquipo();
+        cmbCodigoEquipo.setSelectedItem(codigoEquipo);
+        cargarDatosEquipoSeleccionado();
+        cmbTipoMantModal.setSelectedItem("Preventivo");
+        txtResponsable.setText(nombreUsuario);
+        txtResponsable.setEditable(false);
+        lbTituloModal.setText("Programar mantenimiento preventivo");
+        btnGuardarMant.setText("Guardar");
+        ocultarCampoNombreEquipo();
+        addMantenimiento.pack();
+        addMantenimiento.setSize(561, 535);
+        addMantenimiento.setLocationRelativeTo(this);
+        addMantenimiento.setVisible(true);
+    }
     
     public Mantenimiento() {
         initComponents();

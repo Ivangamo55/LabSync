@@ -91,8 +91,12 @@ public class ReservasProfesor extends javax.swing.JFrame {
         btnConsultar.addActionListener(e -> consultarDisponibilidad());
         btnEnviar.addActionListener(e -> enviarSolicitud());
         dateFecha.addPropertyChangeListener("date", e -> invalidarConsulta());
-        cmbHorario.addActionListener(e -> invalidarConsulta());
+        cmbHorario.addActionListener(e -> {
+            seleccionarTurnoPorHorario();
+            invalidarConsulta();
+        });
         cmbLaboratorio.addActionListener(e -> invalidarConsulta());
+        cmbTurno.setEnabled(false);
     }
 
     private void invalidarConsulta() {
@@ -108,6 +112,7 @@ public class ReservasProfesor extends javax.swing.JFrame {
         if (cmbLaboratorio.getItemCount() > 0) cmbLaboratorio.setSelectedIndex(0);
         txtActividad.setText("");
         cmbTurno.setSelectedIndex(0);
+        cmbCarrera.setSelectedIndex(0);
         cmbGrado.setSelectedIndex(0);
         cmbGrupo.setSelectedIndex(0);
         txtAlumnos.setText("");
@@ -143,7 +148,12 @@ public class ReservasProfesor extends javax.swing.JFrame {
                             false);
             capacidadLaboratorio = resultado.getCapacidad();
             disponibilidadConfirmada = resultado.estaDisponible();
-            lbEstadoDisponibilidad.setText(disponibilidadConfirmada ? "Disponibilidad: laboratorio disponible" : "Disponibilidad: horario ocupado");
+            String estadoDisponibilidad = resultado.estaBloqueadoPorMantenimiento()
+                    ? "no disponible por mantenimiento"
+                    : "horario ocupado";
+            lbEstadoDisponibilidad.setText(disponibilidadConfirmada
+                    ? "Disponibilidad: laboratorio disponible"
+                    : "Disponibilidad: " + estadoDisponibilidad);
             lbEstadoDisponibilidad.setForeground(disponibilidadConfirmada ? new java.awt.Color(8,173,141) : new java.awt.Color(220,53,69));
         } catch (java.sql.SQLException ex) {
             javax.swing.JOptionPane.showMessageDialog(this, "No se pudo consultar la disponibilidad:\n" + ex.getMessage(), "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
@@ -156,8 +166,8 @@ public class ReservasProfesor extends javax.swing.JFrame {
             javax.swing.JOptionPane.showMessageDialog(this, "Consulta nuevamente la disponibilidad antes de enviar.", "Consulta requerida", javax.swing.JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if (txtActividad.getText().isBlank() || cmbTurno.getSelectedIndex() == 0 || cmbGrado.getSelectedIndex() == 0 || cmbGrupo.getSelectedIndex() == 0 || txtAlumnos.getText().isBlank()) {
-            javax.swing.JOptionPane.showMessageDialog(this, "Completa actividad, turno, grado, grupo y cantidad de alumnos.", "Datos requeridos", javax.swing.JOptionPane.WARNING_MESSAGE);
+        if (txtActividad.getText().isBlank() || cmbCarrera.getSelectedIndex() == 0 || cmbTurno.getSelectedIndex() == 0 || cmbGrado.getSelectedIndex() == 0 || cmbGrupo.getSelectedIndex() == 0 || txtAlumnos.getText().isBlank()) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Completa actividad, carrera, grado, grupo y cantidad de alumnos.", "Datos requeridos", javax.swing.JOptionPane.WARNING_MESSAGE);
             return;
         }
         int cantidad;
@@ -172,7 +182,7 @@ public class ReservasProfesor extends javax.swing.JFrame {
             javax.swing.JOptionPane.showMessageDialog(this, "La sesión no está identificada. Inicia sesión nuevamente.", "Sesión inválida", javax.swing.JOptionPane.ERROR_MESSAGE);
             return;
         }
-        String sql = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, laboratorio, actividad, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
+        String sql = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, laboratorio, actividad, carrera, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
         try (java.sql.Connection con = ConexionBD.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             con.setAutoCommit(false);
@@ -196,14 +206,15 @@ public class ReservasProfesor extends javax.swing.JFrame {
                     ps.setString(3, sesion.getRol());
                     ps.setString(4, cmbLaboratorio.getSelectedItem().toString());
                     ps.setString(5, txtActividad.getText().trim());
-                    ps.setString(6, cmbGrado.getSelectedItem().toString());
-                    ps.setString(7, cmbGrupo.getSelectedItem().toString());
-                    ps.setString(8, cmbTurno.getSelectedItem().toString());
-                    ps.setDate(9, new java.sql.Date(dateFecha.getDate().getTime()));
-                    ps.setString(10, cmbHorario.getSelectedItem().toString());
-                    ps.setInt(11, cantidad);
+                    ps.setString(6, cmbCarrera.getSelectedItem().toString());
+                    ps.setString(7, cmbGrado.getSelectedItem().toString());
+                    ps.setString(8, cmbGrupo.getSelectedItem().toString());
+                    ps.setString(9, cmbTurno.getSelectedItem().toString());
+                    ps.setDate(10, new java.sql.Date(dateFecha.getDate().getTime()));
+                    ps.setString(11, cmbHorario.getSelectedItem().toString());
+                    ps.setInt(12, cantidad);
                     String obs = txtObservaciones.getText().trim();
-                    if (obs.isEmpty()) ps.setNull(12, java.sql.Types.VARCHAR); else ps.setString(12, obs);
+                    if (obs.isEmpty()) ps.setNull(13, java.sql.Types.VARCHAR); else ps.setString(13, obs);
                     ps.executeUpdate();
                 }
                 con.commit();
@@ -216,6 +227,19 @@ public class ReservasProfesor extends javax.swing.JFrame {
         } catch (java.sql.SQLException ex) {
             javax.swing.JOptionPane.showMessageDialog(this, "No se pudo registrar la reserva:\n" + ex.getMessage(), "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private void seleccionarTurnoPorHorario() {
+        if (cmbHorario.getSelectedIndex() <= 0) {
+            cmbTurno.setSelectedIndex(0);
+            return;
+        }
+        String horario = cmbHorario.getSelectedItem().toString();
+        java.time.LocalTime inicio = java.time.LocalTime.parse(
+                horario.substring(0, horario.indexOf(" - ")).trim(),
+                java.time.format.DateTimeFormatter.ofPattern("H:mm"));
+        cmbTurno.setSelectedItem(inicio.isBefore(java.time.LocalTime.of(14, 10))
+                ? "Matutino" : "Vespertino");
     }
 
     @SuppressWarnings("unchecked")
@@ -246,6 +270,8 @@ public class ReservasProfesor extends javax.swing.JFrame {
         cmbLaboratorio = new javax.swing.JComboBox<String>();
         lbActividad = new javax.swing.JLabel();
         txtActividad = new javax.swing.JTextField();
+        lbCarrera = new javax.swing.JLabel();
+        cmbCarrera = new javax.swing.JComboBox<String>();
         lbTurno = new javax.swing.JLabel();
         cmbTurno = new javax.swing.JComboBox<String>();
         lbGrado = new javax.swing.JLabel();
@@ -396,16 +422,25 @@ public class ReservasProfesor extends javax.swing.JFrame {
         txtActividad.setFont(new java.awt.Font("Arial", 0, 12));
         txtActividad.setForeground(new java.awt.Color(51, 51, 51));
         txtActividad.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
-        panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 147, 380, 28));
+        panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 147, 230, 28));
+        lbCarrera.setFont(new java.awt.Font("Arial", 1, 12));
+        lbCarrera.setForeground(new java.awt.Color(90, 90, 90));
+        lbCarrera.setText("Carrera");
+        panelFormulario.add(lbCarrera, new org.netbeans.lib.awtextra.AbsoluteConstraints(275, 125, 120, 20));
+        cmbCarrera.setFont(new java.awt.Font("Arial", 0, 12));
+        cmbCarrera.setForeground(new java.awt.Color(51, 51, 51));
+        cmbCarrera.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] {"Seleccionar", "DSM - Desarrollo de Software Multiplataforma", "EVND - Entornos Virtuales y Negocios Digitales"}));
+        cmbCarrera.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
+        panelFormulario.add(cmbCarrera, new org.netbeans.lib.awtextra.AbsoluteConstraints(275, 147, 220, 28));
         lbTurno.setFont(new java.awt.Font("Arial", 1, 12));
         lbTurno.setForeground(new java.awt.Color(90, 90, 90));
         lbTurno.setText("Turno");
-        panelFormulario.add(lbTurno, new org.netbeans.lib.awtextra.AbsoluteConstraints(425, 125, 120, 20));
+        panelFormulario.add(lbTurno, new org.netbeans.lib.awtextra.AbsoluteConstraints(515, 125, 100, 20));
         cmbTurno.setFont(new java.awt.Font("Arial", 0, 12));
         cmbTurno.setForeground(new java.awt.Color(51, 51, 51));
         cmbTurno.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] {"Seleccionar", "Matutino", "Vespertino"}));
         cmbTurno.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
-        panelFormulario.add(cmbTurno, new org.netbeans.lib.awtextra.AbsoluteConstraints(425, 147, 190, 28));
+        panelFormulario.add(cmbTurno, new org.netbeans.lib.awtextra.AbsoluteConstraints(515, 147, 100, 28));
         lbGrado.setFont(new java.awt.Font("Arial", 1, 12));
         lbGrado.setForeground(new java.awt.Color(90, 90, 90));
         lbGrado.setText("Grado");
@@ -580,6 +615,8 @@ public class ReservasProfesor extends javax.swing.JFrame {
     private javax.swing.JComboBox<String> cmbLaboratorio;
     private javax.swing.JLabel lbActividad;
     private javax.swing.JTextField txtActividad;
+    private javax.swing.JLabel lbCarrera;
+    private javax.swing.JComboBox<String> cmbCarrera;
     private javax.swing.JLabel lbTurno;
     private javax.swing.JComboBox<String> cmbTurno;
     private javax.swing.JLabel lbGrado;

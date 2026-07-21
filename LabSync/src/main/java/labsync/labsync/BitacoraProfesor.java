@@ -9,6 +9,8 @@ public class BitacoraProfesor extends javax.swing.JFrame {
 
     private String nombreUsuario;
     private SesionUsuario sesion;
+    private final java.util.List<ReservaBitacora> reservasDisponibles = new java.util.ArrayList<>();
+    private boolean actualizandoSelector;
 
     public BitacoraProfesor() {
         this("Profesor", null);
@@ -73,85 +75,177 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         }
     }
 
-    private void cargarLaboratorios(javax.swing.JComboBox<String> combo, boolean incluirTodos) {
-        combo.removeAllItems();
-        combo.addItem(incluirTodos ? "Todos" : "Seleccionar");
-        String sql = "SELECT nombre FROM laboratorios WHERE estado = 'Disponible' ORDER BY nombre";
-        try (java.sql.Connection con = ConexionBD.conectar()) {
-            if (con == null) return;
-            try (java.sql.PreparedStatement ps = con.prepareStatement(sql);
-                 java.sql.ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) combo.addItem(rs.getString("nombre"));
-            }
-        } catch (java.sql.SQLException ex) {
-            java.util.logging.Logger.getLogger(getClass().getName()).log(java.util.logging.Level.WARNING, "No se cargaron los laboratorios", ex);
-        }
-    }
-
     private Integer idReservaInicial;
 
     private void configurarPantalla() {
         txtProfesor.setText(sesion.getNombreCompleto());
         txtRol.setText(sesion.getRol());
-        dateFecha.setMaxSelectableDate(new java.util.Date());
-        ValidacionFechas.bloquearFinesDeSemana(dateFecha);
-        dateFecha.setDate(ValidacionFechas.anteriorDiaHabil(new java.util.Date()));
-        cargarLaboratorios(cmbLaboratorio, false);
-        btnLimpiar.addActionListener(e -> limpiarFormulario());
-        btnCargarReserva.addActionListener(e -> cargarReservaAprobada(null));
+        configurarCamposAutomaticos();
+        cmbReservas.addActionListener(e -> seleccionarReserva());
+        btnLimpiar.addActionListener(e -> cmbReservas.setSelectedIndex(0));
+        btnCargarReserva.addActionListener(e -> cargarReservasAprobadas(idReservaSeleccionada()));
         btnGuardar.addActionListener(e -> guardarBitacora());
-        if (idReservaInicial != null) cargarReservaAprobada(idReservaInicial);
+        cargarReservasAprobadas(idReservaInicial);
     }
 
-    private void limpiarFormulario() {
-        dateFecha.setDate(ValidacionFechas.anteriorDiaHabil(new java.util.Date()));
-        if (cmbLaboratorio.getItemCount() > 0) cmbLaboratorio.setSelectedIndex(0);
-        txtHorario.setText(""); cmbTurno.setSelectedIndex(0); txtCarrera.setText(""); cmbGrado.setSelectedIndex(0); cmbGrupo.setSelectedIndex(0); txtActividad.setText(""); txtTotalUsuarios.setText(""); cmbEstado.setSelectedIndex(0); txtObservaciones.setText("");
+    private void configurarCamposAutomaticos() {
+        dateFecha.setEnabled(false);
+        cmbLaboratorio.setEnabled(false);
+        txtHorario.setEditable(false);
+        cmbTurno.setEnabled(false);
+        txtCarrera.setEditable(false);
+        cmbGrado.setEnabled(false);
+        cmbGrupo.setEnabled(false);
+        txtActividad.setEditable(false);
+        txtTotalUsuarios.setEditable(false);
+        btnGuardar.setEnabled(false);
     }
 
     private void seleccionarCombo(javax.swing.JComboBox<String> combo, String valor) {
         if (valor == null) return;
-        for (int i=0;i<combo.getItemCount();i++) if (valor.equals(combo.getItemAt(i))) { combo.setSelectedIndex(i); return; }
+        for (int i = 0; i < combo.getItemCount(); i++) {
+            if (valor.equals(combo.getItemAt(i))) {
+                combo.setSelectedIndex(i);
+                return;
+            }
+        }
+        combo.addItem(valor);
+        combo.setSelectedItem(valor);
     }
 
-    private void cargarReservaAprobada(Integer idReserva) {
-        String sql = "SELECT id_reserva, laboratorio, actividad, grado, grupo, turno, fecha, horario, cantidad_alumnos FROM reservas "
+    private void cargarReservasAprobadas(Integer idReservaPreferida) {
+        String sql = "SELECT id_reserva, laboratorio, actividad, carrera, grado, grupo, turno, fecha, horario, cantidad_alumnos FROM reservas "
                 + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) "
-                + "AND rol_solicitante = 'Profesor' AND estado = 'Aprobada' ";
-        if (idReserva != null) sql += "AND id_reserva = ? ";
-        sql += "ORDER BY fecha DESC LIMIT 1";
+                + "AND rol_solicitante = 'Profesor' AND estado = 'Aprobada' "
+                + "AND fecha <= CURRENT_DATE ORDER BY fecha DESC, horario, id_reserva";
+        actualizandoSelector = true;
+        reservasDisponibles.clear();
+        cmbReservas.removeAllItems();
+        cmbReservas.addItem("Selecciona una reserva aprobada");
         try (java.sql.Connection con = ConexionBD.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setInt(1, sesion.getId());
                 ps.setString(2, sesion.getNombreCompleto());
-                if (idReserva != null) ps.setInt(3, idReserva);
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) { javax.swing.JOptionPane.showMessageDialog(this, "No se encontró una reserva aprobada para cargar.", "Sin reservas", javax.swing.JOptionPane.INFORMATION_MESSAGE); return; }
-                    dateFecha.setDate(rs.getDate("fecha")); seleccionarCombo(cmbLaboratorio, rs.getString("laboratorio")); txtHorario.setText(rs.getString("horario")); txtActividad.setText(rs.getString("actividad")); seleccionarCombo(cmbGrado, rs.getString("grado")); seleccionarCombo(cmbGrupo, rs.getString("grupo")); seleccionarCombo(cmbTurno, rs.getString("turno")); txtTotalUsuarios.setText(String.valueOf(rs.getInt("cantidad_alumnos")));
+                    while (rs.next()) {
+                        ReservaBitacora reserva = new ReservaBitacora(rs.getInt("id_reserva"), rs.getDate("fecha"),
+                                rs.getString("horario"), rs.getString("laboratorio"), rs.getString("actividad"),
+                                rs.getString("carrera"), rs.getString("grado"), rs.getString("grupo"), rs.getString("turno"),
+                                rs.getInt("cantidad_alumnos"));
+                        reservasDisponibles.add(reserva);
+                        cmbReservas.addItem(reserva.descripcion());
+                    }
                 }
             }
-        } catch (java.sql.SQLException ex) { javax.swing.JOptionPane.showMessageDialog(this, "No se pudo cargar la reserva:\n" + ex.getMessage(), "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE); }
+            seleccionarReservaPreferida(idReservaPreferida);
+            if (reservasDisponibles.isEmpty()) mostrarSinReservas();
+        } catch (java.sql.SQLException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this, "No se pudieron consultar las reservas:\n" + ex.getMessage(), "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
+        } finally {
+            actualizandoSelector = false;
+        }
+        seleccionarReserva();
+    }
+
+    private void seleccionarReservaPreferida(Integer idReservaPreferida) {
+        if (idReservaPreferida == null) return;
+        for (int i = 0; i < reservasDisponibles.size(); i++) {
+            if (reservasDisponibles.get(i).id() == idReservaPreferida) {
+                cmbReservas.setSelectedIndex(i + 1);
+                return;
+            }
+        }
+    }
+
+    private void seleccionarReserva() {
+        if (actualizandoSelector) return;
+        int indice = cmbReservas.getSelectedIndex() - 1;
+        if (indice < 0 || indice >= reservasDisponibles.size()) {
+            limpiarDetalle();
+            return;
+        }
+        ReservaBitacora reserva = reservasDisponibles.get(indice);
+        dateFecha.setDate(reserva.fecha());
+        seleccionarCombo(cmbLaboratorio, reserva.laboratorio());
+        txtHorario.setText(reserva.horario());
+        txtActividad.setText(reserva.actividad());
+        txtCarrera.setText(reserva.carrera());
+        seleccionarCombo(cmbGrado, reserva.grado());
+        seleccionarCombo(cmbGrupo, reserva.grupo());
+        seleccionarCombo(cmbTurno, reserva.turno());
+        txtTotalUsuarios.setText(String.valueOf(reserva.totalUsuarios()));
+        txtObservaciones.setText("");
+        btnGuardar.setEnabled(true);
+    }
+
+    private void limpiarDetalle() {
+        dateFecha.setDate(null);
+        cmbLaboratorio.setSelectedIndex(0);
+        txtHorario.setText("");
+        cmbTurno.setSelectedIndex(0);
+        cmbGrado.setSelectedIndex(0);
+        cmbGrupo.setSelectedIndex(0);
+        txtActividad.setText("");
+        txtCarrera.setText("");
+        txtTotalUsuarios.setText("");
+        txtObservaciones.setText("");
+        btnGuardar.setEnabled(false);
+    }
+
+    private void mostrarSinReservas() {
+        javax.swing.JOptionPane.showMessageDialog(this,
+                "No tienes reservas aprobadas pendientes de registrar.\nLas reservas futuras aparecerán el día programado.",
+                "Sin reservas disponibles", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private Integer idReservaSeleccionada() {
+        int indice = cmbReservas.getSelectedIndex() - 1;
+        return indice >= 0 && indice < reservasDisponibles.size() ? reservasDisponibles.get(indice).id() : null;
     }
 
     private void guardarBitacora() {
-        if (dateFecha.getDate() == null || cmbLaboratorio.getSelectedIndex() == 0 || txtHorario.getText().isBlank() || cmbTurno.getSelectedIndex() == 0 || txtCarrera.getText().isBlank() || cmbGrado.getSelectedIndex() == 0 || cmbGrupo.getSelectedIndex() == 0 || txtActividad.getText().isBlank() || txtTotalUsuarios.getText().isBlank()) {
-            javax.swing.JOptionPane.showMessageDialog(this, "Completa todos los campos obligatorios de la bitácora.", "Datos requeridos", javax.swing.JOptionPane.WARNING_MESSAGE); return;
+        Integer idReserva = idReservaSeleccionada();
+        if (idReserva == null) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Selecciona una reserva aprobada.", "Reserva requerida", javax.swing.JOptionPane.WARNING_MESSAGE);
+            return;
         }
-        int total; try { total = Integer.parseInt(txtTotalUsuarios.getText().trim()); } catch (NumberFormatException ex) { javax.swing.JOptionPane.showMessageDialog(this, "El total de usuarios debe ser numérico."); return; }
-        if (total <= 0) { javax.swing.JOptionPane.showMessageDialog(this, "El total de usuarios debe ser mayor a cero."); return; }
-        if (!ValidacionFechas.validarDiaHabil(this, dateFecha.getDate(), "registrar actividades en la bitácora")) return;
-        java.time.LocalDate fecha = new java.sql.Date(dateFecha.getDate().getTime()).toLocalDate();
-        if (fecha.isAfter(java.time.LocalDate.now())) { javax.swing.JOptionPane.showMessageDialog(this, "La bitácora no puede registrar una fecha futura.", "Fecha no válida", javax.swing.JOptionPane.WARNING_MESSAGE); return; }
         if (!sesion.estaIdentificada()) { javax.swing.JOptionPane.showMessageDialog(this, "La sesión no está identificada. Inicia sesión nuevamente.", "Sesión inválida", javax.swing.JOptionPane.ERROR_MESSAGE); return; }
         String sql = "INSERT INTO bitacora (fecha, nombre_usuario, rol_usuario, carrera_dependencia, grado, grupo, laboratorio, actividad_materia, turno, horario, total_usuarios, estado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (java.sql.Connection con = ConexionBD.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
-            try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
-                ps.setDate(1, new java.sql.Date(dateFecha.getDate().getTime())); ps.setString(2, sesion.getNombreCompleto()); ps.setString(3, sesion.getRol()); ps.setString(4, txtCarrera.getText().trim()); ps.setString(5, cmbGrado.getSelectedItem().toString()); ps.setString(6, cmbGrupo.getSelectedItem().toString()); ps.setString(7, cmbLaboratorio.getSelectedItem().toString()); ps.setString(8, txtActividad.getText().trim()); ps.setString(9, cmbTurno.getSelectedItem().toString()); ps.setString(10, txtHorario.getText().trim()); ps.setInt(11, total); ps.setString(12, cmbEstado.getSelectedItem().toString()); String obs=txtObservaciones.getText().trim(); if(obs.isEmpty()) ps.setNull(13,java.sql.Types.VARCHAR); else ps.setString(13,obs); ps.executeUpdate();
+            con.setAutoCommit(false);
+            if (!marcarReservaFinalizada(con, idReserva)) {
+                con.rollback();
+                javax.swing.JOptionPane.showMessageDialog(this, "La reserva ya fue registrada o dejó de estar aprobada.", "Reserva no disponible", javax.swing.JOptionPane.WARNING_MESSAGE);
+                cargarReservasAprobadas(null);
+                return;
             }
-            javax.swing.JOptionPane.showMessageDialog(this, "El uso del laboratorio se guardó en la bitácora.", "Registro guardado", javax.swing.JOptionPane.INFORMATION_MESSAGE); limpiarFormulario();
+            try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
+                ps.setDate(1, new java.sql.Date(dateFecha.getDate().getTime())); ps.setString(2, sesion.getNombreCompleto()); ps.setString(3, sesion.getRol()); ps.setString(4, txtCarrera.getText().trim()); ps.setString(5, cmbGrado.getSelectedItem().toString()); ps.setString(6, cmbGrupo.getSelectedItem().toString()); ps.setString(7, cmbLaboratorio.getSelectedItem().toString()); ps.setString(8, txtActividad.getText().trim()); ps.setString(9, cmbTurno.getSelectedItem().toString()); ps.setString(10, txtHorario.getText().trim()); ps.setInt(11, Integer.parseInt(txtTotalUsuarios.getText())); ps.setString(12, "Registrado"); String obs=txtObservaciones.getText().trim(); if(obs.isEmpty()) ps.setNull(13,java.sql.Types.VARCHAR); else ps.setString(13,obs); ps.executeUpdate();
+            }
+            con.commit();
+            javax.swing.JOptionPane.showMessageDialog(this, "La reserva se registró en la bitácora.", "Registro guardado", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            cargarReservasAprobadas(null);
         } catch (java.sql.SQLException ex) { javax.swing.JOptionPane.showMessageDialog(this, "No se pudo guardar la bitácora:\n" + ex.getMessage(), "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE); }
+    }
+
+    private boolean marcarReservaFinalizada(java.sql.Connection con, int idReserva) throws java.sql.SQLException {
+        String sql = "UPDATE reservas SET estado = 'Finalizada' WHERE id_reserva = ? AND estado = 'Aprobada' "
+                + "AND rol_solicitante = 'Profesor' AND (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?))";
+        try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, idReserva);
+            ps.setInt(2, sesion.getId());
+            ps.setString(3, sesion.getNombreCompleto());
+            return ps.executeUpdate() == 1;
+        }
+    }
+
+    private record ReservaBitacora(int id, java.sql.Date fecha, String horario, String laboratorio,
+            String actividad, String carrera, String grado, String grupo, String turno, int totalUsuarios) {
+        private String descripcion() {
+            return String.format("#%d | %s | %s | %s", id, fecha, horario, laboratorio);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -174,6 +268,7 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         lbSubtituloPantalla = new javax.swing.JLabel();
         panelFormulario = new javax.swing.JPanel();
         lbTituloDatos = new javax.swing.JLabel();
+        cmbReservas = new javax.swing.JComboBox<String>();
         btnCargarReserva = new javax.swing.JButton();
         lbFecha = new javax.swing.JLabel();
         dateFecha = new com.toedter.calendar.JDateChooser();
@@ -197,8 +292,6 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         txtActividad = new javax.swing.JTextField();
         lbTotal = new javax.swing.JLabel();
         txtTotalUsuarios = new javax.swing.JTextField();
-        lbEstado = new javax.swing.JLabel();
-        cmbEstado = new javax.swing.JComboBox<String>();
         lbObservaciones = new javax.swing.JLabel();
         scrollObservaciones = new javax.swing.JScrollPane();
         txtObservaciones = new javax.swing.JTextArea();
@@ -292,23 +385,28 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         body.add(lbTituloPantalla, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 15, 420, 30));
         lbSubtituloPantalla.setFont(new java.awt.Font("Arial", 0, 13));
         lbSubtituloPantalla.setForeground(new java.awt.Color(100, 100, 100));
-        lbSubtituloPantalla.setText("Registra el uso real del laboratorio al finalizar tu clase o práctica.");
+        lbSubtituloPantalla.setText("Elige una reserva aprobada; sus datos se cargarán automáticamente.");
         body.add(lbSubtituloPantalla, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 45, 850, 22));
         panelFormulario.setBackground(new java.awt.Color(255, 255, 255));
         panelFormulario.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(220, 220, 220)));
         panelFormulario.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
         lbTituloDatos.setFont(new java.awt.Font("Arial", 1, 18));
         lbTituloDatos.setForeground(new java.awt.Color(8, 173, 141));
-        lbTituloDatos.setText("Nuevo registro de bitácora");
-        panelFormulario.add(lbTituloDatos, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 15, 330, 28));
+        lbTituloDatos.setText("Selecciona una reserva");
+        panelFormulario.add(lbTituloDatos, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 15, 225, 28));
+        cmbReservas.setFont(new java.awt.Font("Arial", 0, 12));
+        cmbReservas.setForeground(new java.awt.Color(51, 51, 51));
+        cmbReservas.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] {"Selecciona una reserva aprobada"}));
+        cmbReservas.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
+        panelFormulario.add(cmbReservas, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 15, 260, 30));
         btnCargarReserva.setBackground(new java.awt.Color(6, 140, 115));
         btnCargarReserva.setFont(new java.awt.Font("Arial", 1, 14));
         btnCargarReserva.setForeground(new java.awt.Color(255, 255, 255));
-        btnCargarReserva.setText("Cargar reserva");
+        btnCargarReserva.setText("Actualizar");
         btnCargarReserva.setBorderPainted(false);
         btnCargarReserva.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnCargarReserva.setFocusPainted(false);
-        panelFormulario.add(btnCargarReserva, new org.netbeans.lib.awtextra.AbsoluteConstraints(440, 12, 175, 32));
+        panelFormulario.add(btnCargarReserva, new org.netbeans.lib.awtextra.AbsoluteConstraints(520, 14, 95, 32));
         lbFecha.setFont(new java.awt.Font("Arial", 1, 12));
         lbFecha.setForeground(new java.awt.Color(90, 90, 90));
         lbFecha.setText("Fecha");
@@ -370,7 +468,7 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         panelFormulario.add(cmbTurno, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 147, 155, 28));
         lbCarrera.setFont(new java.awt.Font("Arial", 1, 12));
         lbCarrera.setForeground(new java.awt.Color(90, 90, 90));
-        lbCarrera.setText("Carrera o dependencia");
+        lbCarrera.setText("Carrera");
         panelFormulario.add(lbCarrera, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 192, 180, 18));
         txtCarrera.setBackground(new java.awt.Color(255, 255, 255));
         txtCarrera.setFont(new java.awt.Font("Arial", 0, 12));
@@ -413,30 +511,21 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         txtTotalUsuarios.setForeground(new java.awt.Color(51, 51, 51));
         txtTotalUsuarios.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
         panelFormulario.add(txtTotalUsuarios, new org.netbeans.lib.awtextra.AbsoluteConstraints(435, 281, 180, 28));
-        lbEstado.setFont(new java.awt.Font("Arial", 1, 12));
-        lbEstado.setForeground(new java.awt.Color(90, 90, 90));
-        lbEstado.setText("Estado del registro");
-        panelFormulario.add(lbEstado, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 326, 160, 18));
-        cmbEstado.setFont(new java.awt.Font("Arial", 0, 12));
-        cmbEstado.setForeground(new java.awt.Color(51, 51, 51));
-        cmbEstado.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] {"Registrado", "Finalizado"}));
-        cmbEstado.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
-        panelFormulario.add(cmbEstado, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 348, 180, 28));
         lbObservaciones.setFont(new java.awt.Font("Arial", 1, 12));
         lbObservaciones.setForeground(new java.awt.Color(90, 90, 90));
         lbObservaciones.setText("Observaciones");
-        panelFormulario.add(lbObservaciones, new org.netbeans.lib.awtextra.AbsoluteConstraints(225, 326, 180, 18));
+        panelFormulario.add(lbObservaciones, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 326, 180, 18));
         txtObservaciones.setColumns(20);
         txtObservaciones.setFont(new java.awt.Font("Arial", 0, 12));
         txtObservaciones.setLineWrap(true);
         txtObservaciones.setRows(5);
         txtObservaciones.setWrapStyleWord(true);
         scrollObservaciones.setViewportView(txtObservaciones);
-        panelFormulario.add(scrollObservaciones, new org.netbeans.lib.awtextra.AbsoluteConstraints(225, 348, 390, 75));
+        panelFormulario.add(scrollObservaciones, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 348, 590, 75));
         btnLimpiar.setBackground(new java.awt.Color(230, 230, 230));
         btnLimpiar.setFont(new java.awt.Font("Arial", 1, 14));
         btnLimpiar.setForeground(new java.awt.Color(70, 70, 70));
-        btnLimpiar.setText("Limpiar");
+        btnLimpiar.setText("Deseleccionar");
         btnLimpiar.setBorderPainted(false);
         btnLimpiar.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnLimpiar.setFocusPainted(false);
@@ -459,15 +548,15 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         panelGuia.add(lbTituloGuia, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 18, 220, 26));
         lbGuia1.setFont(new java.awt.Font("Arial", 0, 12));
         lbGuia1.setForeground(new java.awt.Color(102, 102, 102));
-        lbGuia1.setText("<html>1. Carga tu reserva aprobada o captura los datos manualmente.</html>");
+        lbGuia1.setText("<html>1. Selecciona una reserva aprobada pendiente de registrar.</html>");
         panelGuia.add(lbGuia1, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 60, 240, 45));
         lbGuia2.setFont(new java.awt.Font("Arial", 0, 12));
         lbGuia2.setForeground(new java.awt.Color(102, 102, 102));
-        lbGuia2.setText("<html>2. Verifica horario, grupo, turno y total real de usuarios.</html>");
+        lbGuia2.setText("<html>2. Verifica los datos cargados automáticamente.</html>");
         panelGuia.add(lbGuia2, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 112, 240, 45));
         lbGuia3.setFont(new java.awt.Font("Arial", 0, 12));
         lbGuia3.setForeground(new java.awt.Color(102, 102, 102));
-        lbGuia3.setText("<html>3. Agrega observaciones y guarda el registro en la bitácora.</html>");
+        lbGuia3.setText("<html>3. Agrega observaciones opcionales y guarda.</html>");
         panelGuia.add(lbGuia3, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 164, 240, 50));
         body.add(panelGuia, new org.netbeans.lib.awtextra.AbsoluteConstraints(705, 85, 290, 250));
         panelCampos.setBackground(new java.awt.Color(255, 255, 255));
@@ -483,7 +572,7 @@ public class BitacoraProfesor extends javax.swing.JFrame {
         panelCampos.add(lbCampo1, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 60, 240, 45));
         lbCampo2.setFont(new java.awt.Font("Arial", 0, 12));
         lbCampo2.setForeground(new java.awt.Color(90, 90, 90));
-        lbCampo2.setText("<html>Al cargar una reserva se completan fecha, laboratorio, actividad, grado, grupo, turno, horario y alumnos.</html>");
+        lbCampo2.setText("<html>La carrera, fecha, laboratorio, actividad, grupo, turno, horario y usuarios provienen de la reserva.</html>");
         panelCampos.add(lbCampo2, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 112, 240, 75));
         body.add(panelCampos, new org.netbeans.lib.awtextra.AbsoluteConstraints(705, 355, 290, 230));
 
@@ -541,6 +630,7 @@ public class BitacoraProfesor extends javax.swing.JFrame {
     private javax.swing.JLabel lbSubtituloPantalla;
     private javax.swing.JPanel panelFormulario;
     private javax.swing.JLabel lbTituloDatos;
+    private javax.swing.JComboBox<String> cmbReservas;
     private javax.swing.JButton btnCargarReserva;
     private javax.swing.JLabel lbFecha;
     private com.toedter.calendar.JDateChooser dateFecha;
@@ -564,8 +654,6 @@ public class BitacoraProfesor extends javax.swing.JFrame {
     private javax.swing.JTextField txtActividad;
     private javax.swing.JLabel lbTotal;
     private javax.swing.JTextField txtTotalUsuarios;
-    private javax.swing.JLabel lbEstado;
-    private javax.swing.JComboBox<String> cmbEstado;
     private javax.swing.JLabel lbObservaciones;
     private javax.swing.JScrollPane scrollObservaciones;
     private javax.swing.JTextArea txtObservaciones;

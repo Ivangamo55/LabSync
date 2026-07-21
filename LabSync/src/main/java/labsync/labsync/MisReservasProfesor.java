@@ -8,7 +8,7 @@ package labsync.labsync;
 public class MisReservasProfesor extends javax.swing.JFrame {
 
     private static final String PLACEHOLDER_BUSQUEDA =
-            "Buscar por fecha, horario, laboratorio, grupo o actividad";
+            "Buscar por fecha, horario, laboratorio, carrera, grupo o actividad";
     private static final java.awt.Color COLOR_PLACEHOLDER = new java.awt.Color(140, 140, 140);
     private static final java.awt.Color COLOR_TEXTO = new java.awt.Color(51, 51, 51);
 
@@ -86,7 +86,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
 
     private void configurarPantalla() {
         configurarPlaceholderBusqueda();
-        tablaReservas.setModel(new javax.swing.table.DefaultTableModel(new Object[][]{}, new String[]{"ID", "Fecha", "Horario", "Laboratorio", "Grupo", "Actividad", "Estado"}) {
+        tablaReservas.setModel(new javax.swing.table.DefaultTableModel(new Object[][]{}, new String[]{"ID", "Fecha", "Horario", "Laboratorio", "Carrera", "Grupo", "Actividad", "Estado"}) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
         });
         tablaReservas.setRowHeight(32);
@@ -132,7 +132,8 @@ public class MisReservasProfesor extends javax.swing.JFrame {
     private void cargarReservas() {
         javax.swing.table.DefaultTableModel modelo = (javax.swing.table.DefaultTableModel) tablaReservas.getModel();
         modelo.setRowCount(0);
-        String sql = "SELECT id_reserva, DATE_FORMAT(fecha, '%d/%m/%Y') fecha, horario, laboratorio, CONCAT(grado, grupo) grupo, actividad, estado FROM reservas "
+        String sql = "SELECT id_reserva, DATE_FORMAT(fecha, '%d/%m/%Y') fecha, horario, laboratorio, "
+                + "SUBSTRING_INDEX(carrera, ' - ', 1) carrera, CONCAT(grado, grupo) grupo, actividad, estado FROM reservas "
                 + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) "
                 + "AND rol_solicitante = 'Profesor' ORDER BY fecha DESC, horario";
         try (java.sql.Connection con = ConexionBD.conectar()) {
@@ -141,7 +142,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
                 ps.setInt(1, sesion.getId());
                 ps.setString(2, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) modelo.addRow(new Object[]{rs.getInt("id_reserva"), rs.getString("fecha"), rs.getString("horario"), rs.getString("laboratorio"), rs.getString("grupo"), rs.getString("actividad"), rs.getString("estado")});
+                    while (rs.next()) modelo.addRow(new Object[]{rs.getInt("id_reserva"), rs.getString("fecha"), rs.getString("horario"), rs.getString("laboratorio"), rs.getString("carrera"), rs.getString("grupo"), rs.getString("actividad"), rs.getString("estado")});
                 }
             }
         } catch (java.sql.SQLException ex) {
@@ -155,7 +156,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
         java.util.List<javax.swing.RowFilter<Object, Object>> filtros = new java.util.ArrayList<>();
         String texto = esPlaceholderBusqueda() ? "" : txtBuscar.getText().trim();
         if (!texto.isEmpty()) filtros.add(javax.swing.RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(texto)));
-        if (cmbEstado.getSelectedIndex() > 0) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(cmbEstado.getSelectedItem().toString()) + "$", 6));
+        if (cmbEstado.getSelectedIndex() > 0) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(cmbEstado.getSelectedItem().toString()) + "$", 7));
         if (cmbLaboratorio.getSelectedIndex() > 0) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(cmbLaboratorio.getSelectedItem().toString()) + "$", 3));
         sorter.setRowFilter(filtros.isEmpty() ? null : javax.swing.RowFilter.andFilter(filtros));
     }
@@ -169,7 +170,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
 
     private void verDetalle() {
         int id = idSeleccionado(); if (id < 0) return;
-        String sql = "SELECT nombre_solicitante, rol_solicitante, laboratorio, actividad, grado, grupo, turno, DATE_FORMAT(fecha,'%d/%m/%Y') fecha, horario, cantidad_alumnos, estado, IFNULL(observaciones,'Sin observaciones') observaciones FROM reservas "
+        String sql = "SELECT nombre_solicitante, rol_solicitante, laboratorio, actividad, carrera, grado, grupo, turno, DATE_FORMAT(fecha,'%d/%m/%Y') fecha, horario, cantidad_alumnos, estado, IFNULL(observaciones,'Sin observaciones') observaciones FROM reservas "
                 + "WHERE id_reserva = ? AND (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?))";
         try (java.sql.Connection con = ConexionBD.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
@@ -179,7 +180,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
                 ps.setString(3, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        String detalle = "Solicitante: " + rs.getString("nombre_solicitante") + "\nRol: " + rs.getString("rol_solicitante") + "\nFecha: " + rs.getString("fecha") + "\nHorario: " + rs.getString("horario") + "\nLaboratorio: " + rs.getString("laboratorio") + "\nActividad: " + rs.getString("actividad") + "\nGrado y grupo: " + rs.getString("grado") + rs.getString("grupo") + "\nTurno: " + rs.getString("turno") + "\nCantidad de alumnos: " + rs.getInt("cantidad_alumnos") + "\nEstado: " + rs.getString("estado") + "\nObservaciones: " + rs.getString("observaciones");
+                        String detalle = "Solicitante: " + rs.getString("nombre_solicitante") + "\nRol: " + rs.getString("rol_solicitante") + "\nFecha: " + rs.getString("fecha") + "\nHorario: " + rs.getString("horario") + "\nLaboratorio: " + rs.getString("laboratorio") + "\nCarrera: " + rs.getString("carrera") + "\nActividad: " + rs.getString("actividad") + "\nGrado y grupo: " + rs.getString("grado") + rs.getString("grupo") + "\nTurno: " + rs.getString("turno") + "\nCantidad de alumnos: " + rs.getInt("cantidad_alumnos") + "\nEstado: " + rs.getString("estado") + "\nObservaciones: " + rs.getString("observaciones");
                         javax.swing.JOptionPane.showMessageDialog(this, detalle, "Detalle de la reservación", javax.swing.JOptionPane.INFORMATION_MESSAGE);
                     }
                 }
@@ -190,7 +191,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
     private void cancelarReserva() {
         int id = idSeleccionado(); if (id < 0) return;
         int fila = tablaReservas.convertRowIndexToModel(tablaReservas.getSelectedRow());
-        String estado = String.valueOf(tablaReservas.getModel().getValueAt(fila, 6));
+        String estado = String.valueOf(tablaReservas.getModel().getValueAt(fila, 7));
         if (!("Pendiente".equals(estado) || "Aprobada".equals(estado))) { javax.swing.JOptionPane.showMessageDialog(this, "Solo se pueden cancelar reservas Pendientes o Aprobadas."); return; }
         if (javax.swing.JOptionPane.showConfirmDialog(this, "¿Deseas cancelar la reservación seleccionada?", "Confirmar", javax.swing.JOptionPane.YES_NO_OPTION) != javax.swing.JOptionPane.YES_OPTION) return;
         try (java.sql.Connection con = ConexionBD.conectar()) {
@@ -213,7 +214,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
     private void abrirBitacora() {
         int id = idSeleccionado(); if (id < 0) return;
         int fila = tablaReservas.convertRowIndexToModel(tablaReservas.getSelectedRow());
-        if (!"Aprobada".equals(String.valueOf(tablaReservas.getModel().getValueAt(fila, 6)))) {
+        if (!"Aprobada".equals(String.valueOf(tablaReservas.getModel().getValueAt(fila, 7)))) {
             javax.swing.JOptionPane.showMessageDialog(this, "Selecciona una reserva Aprobada para cargarla en Bitácora.", "Reserva no aprobada", javax.swing.JOptionPane.WARNING_MESSAGE); return;
         }
         BitacoraProfesor ventana = new BitacoraProfesor(sesion, id);
@@ -370,7 +371,7 @@ public class MisReservasProfesor extends javax.swing.JFrame {
         txtBuscar.setBackground(new java.awt.Color(255, 255, 255));
         txtBuscar.setFont(new java.awt.Font("Arial", 0, 12));
         txtBuscar.setForeground(new java.awt.Color(140, 140, 140));
-        txtBuscar.setText("Buscar por fecha, horario, laboratorio, grupo o actividad");
+        txtBuscar.setText("Buscar por fecha, horario, laboratorio, carrera, grupo o actividad");
         txtBuscar.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(180, 180, 180)));
         panelFiltros.add(txtBuscar, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 31, 360, 30));
         lbFiltroEstado.setFont(new java.awt.Font("Arial", 1, 12));
@@ -412,9 +413,9 @@ public class MisReservasProfesor extends javax.swing.JFrame {
                     new Object[][] {
                         
                     },
-                    new String[] {"ID", "Fecha", "Horario", "Laboratorio", "Grupo", "Actividad", "Estado"}
+                    new String[] {"ID", "Fecha", "Horario", "Laboratorio", "Carrera", "Grupo", "Actividad", "Estado"}
                 ) {
-                    boolean[] canEdit = new boolean[] {false, false, false, false, false, false, false};
+                    boolean[] canEdit = new boolean[] {false, false, false, false, false, false, false, false};
                     @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return canEdit[columnIndex]; }
                 });
         tablaReservas.setRowHeight(32);

@@ -11,9 +11,16 @@ public class DashboardLabo extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(DashboardLabo.class.getName());
     private String nombreUsuario;
+    private final AlertaService alertaService = new AlertaService();
+    private javax.swing.JButton btnAlertas;
+    private final java.util.Set<Integer> avisosConocidos = new java.util.HashSet<>();
+    private javax.swing.Timer temporizadorAlertas;
+    private java.awt.TrayIcon iconoNotificaciones;
+    private boolean actualizandoAlertas;
     
     public DashboardLabo(String nombreRecibido) {
         initComponents();
+        inicializarAlertas();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
         this.nombreUsuario = nombreRecibido;
@@ -24,6 +31,7 @@ public class DashboardLabo extends javax.swing.JFrame {
 
     public DashboardLabo() {
         initComponents();
+        inicializarAlertas();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
         cargarDashboard();
@@ -35,6 +43,144 @@ public class DashboardLabo extends javax.swing.JFrame {
         cargarReservacionesHoy();
         cargarUltimosMantenimiento();
         cargarUltimosRegistrosBitacora();
+        actualizarContadorAlertas();
+    }
+
+    /** Se agrega fuera del bloque generado para mantener DashboardLabo.form editable. */
+    private void inicializarAlertas() {
+        btnAlertas = new javax.swing.JButton("🔔 0");
+        btnAlertas.setToolTipText("Consultar alertas");
+        btnAlertas.setFont(new java.awt.Font("Dialog", java.awt.Font.BOLD, 15));
+        btnAlertas.setForeground(new java.awt.Color(8, 173, 141));
+        btnAlertas.setBackground(java.awt.Color.WHITE);
+        btnAlertas.setBorderPainted(false);
+        btnAlertas.setFocusPainted(false);
+        btnAlertas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        btnAlertas.addActionListener(e -> abrirAlertas());
+        headerBlanco.add(btnAlertas,
+                new org.netbeans.lib.awtextra.AbsoluteConstraints(625, 36, 95, 42));
+        headerBlanco.setComponentZOrder(btnAlertas, 0);
+        temporizadorAlertas = new javax.swing.Timer(60_000, e -> actualizarContadorAlertas(true));
+        temporizadorAlertas.setInitialDelay(60_000);
+        temporizadorAlertas.start();
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowClosed(java.awt.event.WindowEvent e) {
+                temporizadorAlertas.stop();
+                if (iconoNotificaciones != null && java.awt.SystemTray.isSupported()) {
+                    java.awt.SystemTray.getSystemTray().remove(iconoNotificaciones);
+                }
+            }
+        });
+    }
+
+    private void actualizarContadorAlertas() {
+        actualizarContadorAlertas(true);
+    }
+
+    private void actualizarContadorSinSincronizar() {
+        actualizarContadorAlertas(false);
+    }
+
+    /** Consulta la base fuera del hilo de Swing para no congelar el dashboard. */
+    private void actualizarContadorAlertas(boolean sincronizar) {
+        if (actualizandoAlertas) return;
+        actualizandoAlertas = true;
+        btnAlertas.setEnabled(false);
+        btnAlertas.setText("🔔 …");
+        new javax.swing.SwingWorker<java.util.List<Alerta>, Void>() {
+            @Override protected java.util.List<Alerta> doInBackground() throws Exception {
+                try (Connection conexion = ConexionBD.conectar()) {
+                    if (conexion == null) return null;
+                    if (sincronizar) alertaService.sincronizar(conexion);
+                    return alertaService.listar(conexion, true);
+                }
+            }
+
+            @Override protected void done() {
+                try {
+                    java.util.List<Alerta> activas = get();
+                    btnAlertas.setText(activas == null ? "🔔 -" : "🔔 " + activas.size());
+                    if (activas != null) procesarAvisosNuevos(activas);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    btnAlertas.setText("🔔 -");
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    logger.log(java.util.logging.Level.WARNING,
+                            "No fue posible actualizar alertas", ex.getCause());
+                    btnAlertas.setText("🔔 E");
+                } finally {
+                    actualizandoAlertas = false;
+                    btnAlertas.setEnabled(true);
+                }
+            }
+        }.execute();
+    }
+
+    private void abrirAlertas() {
+        new AlertasDialog(this, alertaService,
+                this::actualizarContadorSinSincronizar,
+                this::abrirModuloAlerta).setVisible(true);
+    }
+
+    private void procesarAvisosNuevos(java.util.List<Alerta> activas) {
+        java.util.Set<Integer> idsActivos = new java.util.HashSet<>();
+        java.util.List<Alerta> nuevos = new java.util.ArrayList<>();
+        for (Alerta alerta : activas) {
+            idsActivos.add(alerta.id());
+            if (!avisosConocidos.contains(alerta.id())) nuevos.add(alerta);
+        }
+        avisosConocidos.retainAll(idsActivos);
+        avisosConocidos.addAll(idsActivos);
+        btnAlertas.setToolTipText(activas.isEmpty() ? "No hay avisos pendientes"
+                : activas.size() + " aviso(s) que requieren atención");
+        if (!nuevos.isEmpty()) mostrarNotificacion(nuevos);
+    }
+
+    private void mostrarNotificacion(java.util.List<Alerta> nuevos) {
+        Alerta principal = nuevos.get(0);
+        String mensaje = principal.detalle()
+                + (nuevos.size() > 1 ? "\nY " + (nuevos.size() - 1) + " aviso(s) más." : "");
+        if (java.awt.SystemTray.isSupported()) {
+            try {
+                if (iconoNotificaciones == null) {
+                    java.awt.Image imagen = new javax.swing.ImageIcon(getClass().getResource(
+                            "/images/logo_labsync_no_background.png")).getImage();
+                    iconoNotificaciones = new java.awt.TrayIcon(imagen, "LabSync");
+                    iconoNotificaciones.setImageAutoSize(true);
+                    iconoNotificaciones.addActionListener(e -> abrirAlertas());
+                    java.awt.SystemTray.getSystemTray().add(iconoNotificaciones);
+                }
+                iconoNotificaciones.displayMessage(principal.titulo(), mensaje,
+                        "Critica".equals(principal.prioridad())
+                                ? java.awt.TrayIcon.MessageType.WARNING
+                                : java.awt.TrayIcon.MessageType.INFO);
+                return;
+            } catch (java.awt.AWTException ex) {
+                logger.log(java.util.logging.Level.FINE,
+                        "No fue posible mostrar la notificación del sistema", ex);
+            }
+        }
+        java.awt.Toolkit.getDefaultToolkit().beep();
+        btnAlertas.setBackground(new java.awt.Color(224, 248, 242));
+    }
+
+    private void abrirModuloAlerta(Alerta alerta) {
+        javax.swing.JFrame ventana;
+        if ("FALLA_PENDIENTE".equals(alerta.tipo())) {
+            ventana = new ReporteFalla(nombreUsuario);
+        } else if ("MANTENIMIENTO_REQUERIDO".equals(alerta.tipo())) {
+            // No existe todavía un registro: se abre directamente el formulario
+            // de alta con el equipo y el tipo preventivo precargados.
+            ventana = new Mantenimiento(nombreUsuario, alerta.referencia());
+        } else if (alerta.tipo().startsWith("MANTENIMIENTO")
+                || "SOFTWARE_ACTUALIZACION".equals(alerta.tipo())) {
+            ventana = new Mantenimiento(nombreUsuario);
+        } else {
+            ventana = new Inventario(nombreUsuario, alerta.referencia());
+        }
+        ventana.setVisible(true);
+        ventana.setLocationRelativeTo(null);
+        dispose();
     }
     
     private void cargarReservacionesHoy() {

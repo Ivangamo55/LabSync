@@ -51,6 +51,20 @@ public class Inventario extends javax.swing.JFrame {
         cargarTablaInventarioFiltrada();
     }
 
+    /** Abre el inventario enfocado en el equipo originador de un aviso. */
+    public Inventario(String nombreRecibido, String codigoEquipo) {
+        this(nombreRecibido);
+        if (codigoEquipo != null && !codigoEquipo.isBlank()) {
+            txtBuscar.setText(codigoEquipo);
+            txtBuscar.setForeground(COLOR_TEXTO);
+            cargarTablaInventarioFiltrada();
+            if (tablaInventario.getRowCount() > 0) {
+                tablaInventario.setRowSelectionInterval(0, 0);
+                tablaInventario.scrollRectToVisible(tablaInventario.getCellRect(0, 0, true));
+            }
+        }
+    }
+
     public Inventario() {
         initComponents();
         cargarLaboratoriosDesdeBD();

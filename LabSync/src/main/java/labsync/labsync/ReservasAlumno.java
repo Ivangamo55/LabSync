@@ -206,7 +206,11 @@ public class ReservasAlumno extends javax.swing.JFrame {
                                 = servicio.consultarParaAlumno(
                                         con, laboratorioActual, fecha.toLocalDate(), horario, false);
                         int equiposDisponibles = resultado.getEquiposDisponibles();
-                        String estado = resultado.estaDisponible() ? "Disponible" : "Ocupado";
+                        String estado = resultado.estaDisponible()
+                                ? "Disponible"
+                                : resultado.estaBloqueadoPorMantenimiento()
+                                        ? "No disponible por mantenimiento"
+                                        : "Ocupado";
 
                         modelo.addRow(new Object[]{
                             laboratorioActual,
