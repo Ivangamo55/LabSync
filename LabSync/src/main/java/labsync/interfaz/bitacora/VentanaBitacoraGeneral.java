@@ -533,7 +533,7 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
                 "Actividad / Materia",
                 "Turno",
                 "Horario",
-                "Total Usuarios",
+                "Personas",
                 "Estado",
                 "Observaciones"
             };
@@ -834,7 +834,7 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
 
         lbDetalleTotalUsuarios.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbDetalleTotalUsuarios.setForeground(new java.awt.Color(102, 102, 102));
-        lbDetalleTotalUsuarios.setText("Total Usuarios");
+        lbDetalleTotalUsuarios.setText("Personas (máximo 31)");
         body.add(lbDetalleTotalUsuarios, new org.netbeans.lib.awtextra.AbsoluteConstraints(470, 285, -1, -1));
 
         txtDetalleTotalUsuarios.setEditable(false);

@@ -643,7 +643,7 @@
                       <Table columnCount="5" rowCount="4">
                         <Column editable="false" title="Laboratorio" type="java.lang.Object"/>
                         <Column editable="false" title="Horario" type="java.lang.Object"/>
-                        <Column editable="false" title="Capacidad" type="java.lang.Object"/>
+                        <Column editable="false" title="Equipos disponibles" type="java.lang.Object"/>
                         <Column editable="false" title="Estado" type="java.lang.Object"/>
                         <Column editable="false" title="Acci&#xf3;n" type="java.lang.Object"/>
                       </Table>

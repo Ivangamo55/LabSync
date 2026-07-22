@@ -147,6 +147,7 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
         String sql = "SELECT nombre "
             + "FROM laboratorios "
             + "WHERE estado = 'Disponible' "
+            + "AND nombre NOT IN ('PB-05', 'M-19') "
             + "ORDER BY nombre ASC";
 
         try (Connection con = ConexionBaseDatos.conectar()) {
@@ -186,7 +187,8 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
 
         String sqlLaboratorios = "SELECT nombre "
             + "FROM laboratorios "
-            + "WHERE estado = 'Disponible' ";
+            + "WHERE estado = 'Disponible' "
+            + "AND nombre NOT IN ('PB-05', 'M-19') ";
 
         java.util.ArrayList<String> parametrosLaboratorios = new java.util.ArrayList<>();
 
@@ -245,10 +247,6 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
         } catch (SQLException ex) {
             mostrarErrorSQL("No se pudo consultar la disponibilidad", ex);
         }
-    }
-
-    private int capacidadLaboratorio(String laboratorio) {
-        return laboratorio.startsWith("5-") ? 25 : 30;
     }
 
     private void seleccionarLaboratorioDisponible() {
@@ -720,7 +718,7 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
                 {null, null, null, null, null}
             },
             new String [] {
-                "Laboratorio", "Horario", "Capacidad", "Estado", "Acción"
+                "Laboratorio", "Horario", "Equipos disponibles", "Estado", "Acción"
             }
         ) {
             boolean[] canEdit = new boolean [] {

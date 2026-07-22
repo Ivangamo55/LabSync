@@ -30,8 +30,8 @@ public final class CatalogoLaboratorios {
         combo.removeAllItems();
         combo.addItem(primeraOpcion);
 
-        String sql = "SELECT nombre FROM laboratorios"
-                + (soloDisponibles ? " WHERE estado = 'Disponible'" : "")
+        String sql = "SELECT nombre FROM laboratorios WHERE nombre NOT IN ('PB-05', 'M-19')"
+                + (soloDisponibles ? " AND estado = 'Disponible'" : "")
                 + " ORDER BY nombre";
 
         try (Connection con = ConexionBaseDatos.conectar()) {

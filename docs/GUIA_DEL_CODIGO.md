@@ -24,6 +24,8 @@ su función es construir y acomodar controles, por lo que no debe editarse manua
 | `RepositorioAlertas` | Lee, crea y actualiza alertas persistidas. |
 | `ServicioAlertas` | Detecta eventos que deben producir notificaciones. |
 | `ServicioDisponibilidad` | Aplica las reglas de ocupación y bloqueo de laboratorios. |
+| `ServicioHorarios` | Consulta clases del día y valida conflictos de profesor, grupo o laboratorio. |
+| `VentanaGestionHorarios` | Permite al laboratorista administrar ciclos y asignaciones regulares. |
 | `ServicioMantenimiento` | Coordina cambios de mantenimiento e inventario en transacciones. |
 
 ## Autenticación y paneles

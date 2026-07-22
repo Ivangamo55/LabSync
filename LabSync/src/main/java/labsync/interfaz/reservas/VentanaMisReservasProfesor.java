@@ -96,7 +96,7 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
     private void cargarLaboratorios(javax.swing.JComboBox<String> combo, boolean incluirTodos) {
         combo.removeAllItems();
         combo.addItem(incluirTodos ? "Todos" : "Seleccionar");
-        String sql = "SELECT nombre FROM laboratorios WHERE estado = 'Disponible' ORDER BY nombre";
+        String sql = "SELECT nombre FROM laboratorios WHERE estado = 'Disponible' AND nombre NOT IN ('PB-05', 'M-19') ORDER BY nombre";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) return;
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql);
@@ -204,7 +204,7 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
                 ps.setString(3, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        String detalle = "Solicitante: " + rs.getString("nombre_solicitante") + "\nRol: " + rs.getString("rol_solicitante") + "\nFecha: " + rs.getString("fecha") + "\nHorario: " + rs.getString("horario") + "\nLaboratorio: " + rs.getString("laboratorio") + "\nCarrera: " + rs.getString("carrera") + "\nActividad: " + rs.getString("actividad") + "\nGrado y grupo: " + rs.getString("grado") + rs.getString("grupo") + "\nTurno: " + rs.getString("turno") + "\nCantidad de alumnos: " + rs.getInt("cantidad_alumnos") + "\nEstado: " + rs.getString("estado") + "\nObservaciones: " + rs.getString("observaciones");
+                        String detalle = "Solicitante: " + rs.getString("nombre_solicitante") + "\nRol: " + rs.getString("rol_solicitante") + "\nFecha: " + rs.getString("fecha") + "\nHorario: " + rs.getString("horario") + "\nLaboratorio: " + rs.getString("laboratorio") + "\nCarrera: " + rs.getString("carrera") + "\nActividad: " + rs.getString("actividad") + "\nGrado y grupo: " + rs.getString("grado") + rs.getString("grupo") + "\nTurno: " + rs.getString("turno") + "\nPersonas: " + rs.getInt("cantidad_alumnos") + " de 31\nEstado: " + rs.getString("estado") + "\nObservaciones: " + rs.getString("observaciones");
                         javax.swing.JOptionPane.showMessageDialog(this, detalle, "Detalle de la reservación", javax.swing.JOptionPane.INFORMATION_MESSAGE);
                     }
                 }

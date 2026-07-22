@@ -40,6 +40,8 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
         if (icono != null) setIconImage(new javax.swing.ImageIcon(icono).getImage());
         configurarNavegacion();
         configurarPantalla();
+        lbTituloPantalla.setText("Reserva extraordinaria");
+        lbSubtituloPantalla.setText("Para mentorías, asesorías, reposiciones y actividades fuera del horario regular.");
         labsync.interfaz.comun.NotificacionesGlobales.profesor(this, header, sesion);
         setLocationRelativeTo(null);
     }
@@ -81,7 +83,7 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
     private void cargarLaboratorios(javax.swing.JComboBox<String> combo, boolean incluirTodos) {
         combo.removeAllItems();
         combo.addItem(incluirTodos ? "Todos" : "Seleccionar");
-        String sql = "SELECT nombre FROM laboratorios WHERE estado = 'Disponible' ORDER BY nombre";
+        String sql = "SELECT nombre FROM laboratorios WHERE estado = 'Disponible' AND nombre NOT IN ('PB-05', 'M-19') ORDER BY nombre";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) return;
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql);
@@ -94,7 +96,6 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
     }
 
     private boolean disponibilidadConfirmada;
-    private int capacidadLaboratorio;
 
     private void configurarPantalla() {
         dateFecha.setMinSelectableDate(new java.util.Date());
@@ -115,7 +116,6 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
 
     private void invalidarConsulta() {
         disponibilidadConfirmada = false;
-        capacidadLaboratorio = 0;
         lbEstadoDisponibilidad.setText("Disponibilidad: pendiente de consulta");
         lbEstadoDisponibilidad.setForeground(new java.awt.Color(100, 100, 100));
     }
@@ -160,7 +160,6 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
                             new java.sql.Date(dateFecha.getDate().getTime()).toLocalDate(),
                             cmbHorario.getSelectedItem().toString(),
                             false);
-            capacidadLaboratorio = resultado.getCapacidad();
             disponibilidadConfirmada = resultado.estaDisponible();
             String estadoDisponibilidad = resultado.estaBloqueadoPorMantenimiento()
                     ? "no disponible por mantenimiento"
@@ -188,8 +187,8 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
         try { cantidad = Integer.parseInt(txtAlumnos.getText().trim()); }
         catch (NumberFormatException ex) { javax.swing.JOptionPane.showMessageDialog(this, "La cantidad de alumnos debe ser numérica."); return; }
         if (cantidad <= 0) { javax.swing.JOptionPane.showMessageDialog(this, "La cantidad de alumnos debe ser mayor a cero."); return; }
-        if (cantidad > capacidadLaboratorio) {
-            javax.swing.JOptionPane.showMessageDialog(this, "La cantidad supera la capacidad del laboratorio (" + capacidadLaboratorio + ").", "Capacidad excedida", javax.swing.JOptionPane.WARNING_MESSAGE);
+        if (cantidad > ServicioDisponibilidad.MAXIMO_PERSONAS_POR_LABORATORIO) {
+            javax.swing.JOptionPane.showMessageDialog(this, "El límite es de 31 personas por laboratorio.", "Capacidad excedida", javax.swing.JOptionPane.WARNING_MESSAGE);
             return;
         }
         if (!sesion.estaIdentificada()) {
@@ -475,7 +474,7 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
         panelFormulario.add(cmbGrupo, new org.netbeans.lib.awtextra.AbsoluteConstraints(185, 214, 140, 28));
         lbAlumnos.setFont(new java.awt.Font("Arial", 1, 12));
         lbAlumnos.setForeground(new java.awt.Color(90, 90, 90));
-        lbAlumnos.setText("Cantidad de alumnos");
+        lbAlumnos.setText("Personas (máximo 31)");
         panelFormulario.add(lbAlumnos, new org.netbeans.lib.awtextra.AbsoluteConstraints(345, 192, 180, 20));
         txtAlumnos.setBackground(new java.awt.Color(255, 255, 255));
         txtAlumnos.setFont(new java.awt.Font("Arial", 0, 12));
@@ -539,7 +538,7 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
         panelGuia.add(lbGuia1, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 60, 240, 38));
         lbGuia2.setFont(new java.awt.Font("Arial", 0, 12));
         lbGuia2.setForeground(new java.awt.Color(102, 102, 102));
-        lbGuia2.setText("<html>2. Captura la actividad, grupo, turno y cantidad de alumnos.</html>");
+        lbGuia2.setText("<html>2. Captura la actividad, grupo, turno y personas (máximo 31).</html>");
         panelGuia.add(lbGuia2, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 105, 240, 48));
         lbGuia3.setFont(new java.awt.Font("Arial", 0, 12));
         lbGuia3.setForeground(new java.awt.Color(102, 102, 102));

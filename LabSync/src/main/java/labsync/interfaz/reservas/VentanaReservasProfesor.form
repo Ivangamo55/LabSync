@@ -282,7 +282,7 @@
             <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
               <Color blue="46" green="46" red="46" type="rgb"/>
             </Property>
-            <Property name="text" type="java.lang.String" value="Reservar laboratorio"/>
+            <Property name="text" type="java.lang.String" value="Reserva extraordinaria"/>
           </Properties>
           <Constraints>
             <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
@@ -298,7 +298,7 @@
             <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
               <Color blue="64" green="64" red="64" type="rgb"/>
             </Property>
-            <Property name="text" type="java.lang.String" value="Solicita un laboratorio con la información necesaria para registrar tu reservación."/>
+            <Property name="text" type="java.lang.String" value="Para mentorías, asesorías, reposiciones y actividades fuera del horario regular."/>
           </Properties>
           <Constraints>
             <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
@@ -738,7 +738,7 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="5a" green="5a" red="5a" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="Cantidad de alumnos"/>
+                <Property name="text" type="java.lang.String" value="Personas (máximo 31)"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
@@ -977,7 +977,7 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="66" green="66" red="66" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="&lt;html&gt;2. Captura la actividad, grupo, turno y cantidad de alumnos.&lt;/html&gt;"/>
+                <Property name="text" type="java.lang.String" value="&lt;html&gt;2. Captura la actividad, grupo, turno y personas (máximo 31).&lt;/html&gt;"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">

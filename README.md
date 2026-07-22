@@ -35,7 +35,10 @@ El JAR ejecutable queda en `LabSync/target/LabSync-1.0.jar`.
 
 1. Iniciar MySQL o MariaDB en `localhost:3306`.
 2. Importar `LabSync/src/main/resources/DB/labsync_db.sql`.
-3. La configuración actual usa la base `labsync_db`, usuario `root` y
+3. Aplicar en orden los scripts de `LabSync/src/main/resources/DB/migrations`.
+   Los horarios UTJ-CCD se incorporan mediante
+   `20260722_agregar_horarios_escolares_ccd.sql`.
+4. La configuración actual usa la base `labsync_db`, usuario `root` y
    contraseña vacía; se encuentra en
    `LabSync/src/main/java/labsync/configuracion/ConexionBaseDatos.java`.
 

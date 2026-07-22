@@ -298,7 +298,7 @@
             <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
               <Color blue="64" green="64" red="64" type="rgb"/>
             </Property>
-            <Property name="text" type="java.lang.String" value="Elige una reserva aprobada; sus datos se cargarán automáticamente."/>
+            <Property name="text" type="java.lang.String" value="Selecciona una clase de hoy o una reserva extraordinaria aprobada."/>
           </Properties>
           <Constraints>
             <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
@@ -354,7 +354,7 @@
                 </Property>
                 <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
                   <StringArray count="1">
-                    <StringItem index="0" value="Selecciona una reserva aprobada"/>
+                    <StringItem index="0" value="Selecciona una clase o reserva extraordinaria"/>
                   </StringArray>
                 </Property>
                 <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">
@@ -852,11 +852,11 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="5a" green="5a" red="5a" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="Total de usuarios"/>
+                <Property name="text" type="java.lang.String" value="Personas (máximo 31)"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">
-                  <AbsoluteConstraints x="435" y="259" width="150" height="18"/>
+                  <AbsoluteConstraints x="435" y="259" width="180" height="18"/>
                 </Constraint>
               </Constraints>
             </Component>
@@ -1019,7 +1019,7 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="66" green="66" red="66" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="&lt;html&gt;1. Selecciona una reserva aprobada pendiente de registrar.&lt;/html&gt;"/>
+                <Property name="text" type="java.lang.String" value="&lt;html&gt;1. Selecciona una clase programada o una reserva extraordinaria.&lt;/html&gt;"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">

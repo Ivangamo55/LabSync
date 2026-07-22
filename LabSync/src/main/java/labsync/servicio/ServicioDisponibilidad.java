@@ -13,7 +13,7 @@ import java.time.format.DateTimeParseException;
 /** Centraliza las reglas de disponibilidad compartidas por reservas y mantenimiento. */
 public final class ServicioDisponibilidad {
 
-    public static final int CAPACIDAD_ESTANDAR_AULA = 35;
+    public static final int MAXIMO_PERSONAS_POR_LABORATORIO = 31;
     private static final String[] ESTADOS_RESERVA_ACTIVA = {"Pendiente", "Aprobada"};
     private static final DateTimeFormatter FORMATO_HORA = DateTimeFormatter.ofPattern("H:mm");
 
@@ -31,7 +31,7 @@ public final class ServicioDisponibilidad {
 
     public ResultadoDisponibilidad validarAprobacion(
             Connection conexion, int idReserva, boolean bloquear) throws SQLException {
-        String sql = "SELECT laboratorio, fecha, horario, rol_solicitante FROM reservas "
+        String sql = "SELECT laboratorio, fecha, horario, rol_solicitante, cantidad_alumnos FROM reservas "
                 + "WHERE id_reserva = ?" + clausulaBloqueo(bloquear);
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setInt(1, idReserva);
@@ -39,6 +39,10 @@ public final class ServicioDisponibilidad {
                 if (!rs.next()) {
                     return ResultadoDisponibilidad.noDisponible(
                             "No se encontró la reserva seleccionada.", 0);
+                }
+                if (rs.getInt("cantidad_alumnos") > MAXIMO_PERSONAS_POR_LABORATORIO) {
+                    return ResultadoDisponibilidad.noDisponible(
+                            "La reserva supera el límite de 31 personas por laboratorio.", 0);
                 }
                 return consultar(
                         conexion,
@@ -64,8 +68,19 @@ public final class ServicioDisponibilidad {
             ps.setString(3, ESTADOS_RESERVA_ACTIVA[0]);
             ps.setString(4, ESTADOS_RESERVA_ACTIVA[1]);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+                if (rs.next()) return true;
             }
+        }
+        String clases = "SELECT h.id_horario FROM horarios_clase h "
+                + "JOIN laboratorios l ON l.id_laboratorio=h.id_laboratorio "
+                + "JOIN ciclos_escolares c ON c.id_ciclo=h.id_ciclo "
+                + "WHERE l.nombre=? AND h.activo=1 AND c.activo=1 "
+                + "AND ? BETWEEN c.fecha_inicio AND c.fecha_fin "
+                + "AND h.dia_semana=ELT(WEEKDAY(?)+1,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo') "
+                + "LIMIT 1" + clausulaBloqueo(bloquear);
+        try (PreparedStatement ps=conexion.prepareStatement(clases)) {
+            ps.setString(1,laboratorio); ps.setDate(2,Date.valueOf(fecha)); ps.setDate(3,Date.valueOf(fecha));
+            try(ResultSet rs=ps.executeQuery()) { return rs.next(); }
         }
     }
 
@@ -83,6 +98,10 @@ public final class ServicioDisponibilidad {
         if (tieneReporteEnRevision(conexion, laboratorio, bloquear)) {
             return ResultadoDisponibilidad.noDisponiblePorMantenimiento(
                     "El laboratorio no está disponible por mantenimiento: tiene un reporte de falla en revisión.");
+        }
+        if (tieneClaseRegular(conexion, laboratorio, fecha, horario, bloquear)) {
+            return ResultadoDisponibilidad.noDisponible(
+                    "El laboratorio tiene una clase regular asignada en ese horario.", 0);
         }
 
         Ocupacion ocupacion = consultarOcupacion(
@@ -106,12 +125,12 @@ public final class ServicioDisponibilidad {
 
     private int consultarCapacidad(Connection conexion, String laboratorio, boolean bloquear)
             throws SQLException {
-        String sql = "SELECT 1 FROM laboratorios "
+        String sql = "SELECT total_equipos FROM laboratorios "
                 + "WHERE nombre = ? AND estado = 'Disponible'" + clausulaBloqueo(bloquear);
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setString(1, laboratorio);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? CAPACIDAD_ESTANDAR_AULA : 0;
+                return rs.next() ? rs.getInt("total_equipos") : 0;
             }
         }
     }
@@ -142,6 +161,25 @@ public final class ServicioDisponibilidad {
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }
+        }
+    }
+
+    private boolean tieneClaseRegular(Connection conexion, String laboratorio,
+            LocalDate fecha, String horario, boolean bloquear) throws SQLException {
+        LocalTime[] intervalo = obtenerIntervalo(horario);
+        String sql = "SELECT h.id_horario FROM horarios_clase h "
+                + "JOIN laboratorios l ON l.id_laboratorio=h.id_laboratorio "
+                + "JOIN ciclos_escolares c ON c.id_ciclo=h.id_ciclo "
+                + "WHERE l.nombre=? AND h.activo=1 AND c.activo=1 "
+                + "AND ? BETWEEN c.fecha_inicio AND c.fecha_fin "
+                + "AND h.dia_semana=ELT(WEEKDAY(?)+1,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo') "
+                + "AND h.hora_inicio < ? AND ? < h.hora_fin LIMIT 1"
+                + clausulaBloqueo(bloquear);
+        try (PreparedStatement ps=conexion.prepareStatement(sql)) {
+            ps.setString(1,laboratorio); ps.setDate(2,Date.valueOf(fecha));
+            ps.setDate(3,Date.valueOf(fecha)); ps.setTime(4,java.sql.Time.valueOf(intervalo[1]));
+            ps.setTime(5,java.sql.Time.valueOf(intervalo[0]));
+            try(ResultSet rs=ps.executeQuery()) { return rs.next(); }
         }
     }
 

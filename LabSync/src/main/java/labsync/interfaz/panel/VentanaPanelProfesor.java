@@ -109,7 +109,7 @@ public class VentanaPanelProfesor extends javax.swing.JFrame {
     private void cargarLaboratorios(javax.swing.JComboBox<String> combo, boolean incluirTodos) {
         combo.removeAllItems();
         combo.addItem(incluirTodos ? "Todos" : "Seleccionar");
-        String sql = "SELECT nombre FROM laboratorios WHERE estado = 'Disponible' ORDER BY nombre";
+        String sql = "SELECT nombre FROM laboratorios WHERE estado = 'Disponible' AND nombre NOT IN ('PB-05', 'M-19') ORDER BY nombre";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) return;
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql);

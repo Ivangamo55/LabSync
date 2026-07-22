@@ -624,7 +624,7 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
                 "Grupo",
                 "Turno",
                 "Horario",
-                "Cantidad Alumnos",
+                "Personas",
                 "Estado",
                 "Observaciones",
                 "Fecha Registro"
@@ -947,7 +947,7 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
 
         lbDetalleCantidad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbDetalleCantidad.setForeground(new java.awt.Color(102, 102, 102));
-        lbDetalleCantidad.setText("Cantidad de Alumnos");
+        lbDetalleCantidad.setText("Personas (máximo 31)");
         bodyModal.add(lbDetalleCantidad, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 370, -1, -1));
 
         txtDetalleCantidad.setEditable(false);

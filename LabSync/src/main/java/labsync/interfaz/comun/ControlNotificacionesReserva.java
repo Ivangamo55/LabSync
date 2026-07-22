@@ -99,8 +99,8 @@ public final class ControlNotificacionesReserva {
         if (java.awt.SystemTray.isSupported()) {
             try {
                 if (icono == null) {
-                    java.awt.Image imagen = new javax.swing.ImageIcon(getClass().getResource(
-                            "/images/logo_labsync_no_background.png")).getImage();
+                    java.awt.Image imagen = Recursos
+                            .icono("/images/logo_labsync_no_background.png").getImage();
                     icono = new java.awt.TrayIcon(imagen, "LabSync");
                     icono.setImageAutoSize(true);
                     icono.addActionListener(e -> abrirCentro());

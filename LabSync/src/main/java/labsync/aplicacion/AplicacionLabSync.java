@@ -6,9 +6,10 @@ import labsync.interfaz.autenticacion.VentanaInicioSesion;
 public class AplicacionLabSync {
 
     public static void main(String[] args) {
-        VentanaInicioSesion ventanaLogin = new VentanaInicioSesion();
-        
-        ventanaLogin.setVisible(true);
-        ventanaLogin.setLocationRelativeTo(null);
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            VentanaInicioSesion ventanaLogin = new VentanaInicioSesion();
+            ventanaLogin.setLocationRelativeTo(null);
+            ventanaLogin.setVisible(true);
+        });
     }
 }

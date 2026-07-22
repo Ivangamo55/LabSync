@@ -2,6 +2,25 @@
 
 Este documento describe visualmente cómo funciona AplicacionLabSync a partir del código actual. AplicacionLabSync es una aplicación de escritorio Java Swing que centraliza reservas de laboratorios, bitácoras de uso, inventario, reportes de fallas y mantenimientos.
 
+## Horarios regulares UTJ-CCD
+
+Los catálogos `ciclos_escolares`, `trayectorias`, `materias`, `plan_materias` y
+`grupos` separan el plan académico de sus asignaciones. `horarios_clase` vincula
+ciclo, grupo, materia del plan, profesor y un laboratorio existente. La
+bitácora conserva una referencia opcional al horario y una copia de sus datos
+descriptivos, por lo que los cambios de ciclos posteriores no alteran el
+historial.
+
+Las reservas representan únicamente actividades extraordinarias. Antes de
+aceptarlas, `ServicioDisponibilidad` comprueba clases regulares, reservas
+activas, mantenimientos y fallas en revisión. La bitácora del profesor reúne
+las clases del día y sus reservas extraordinarias aprobadas.
+
+El plan conserva todas las materias oficiales, pero `horarios_clase` omite las
+asignaturas de inglés, formación humana y socioemocional, ética, liderazgo,
+física y matemáticas. LabSync solo controla sus asignaciones ficticias que
+requieren un laboratorio de cómputo.
+
 ## Vista general
 
 ```mermaid

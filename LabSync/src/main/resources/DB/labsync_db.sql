@@ -3,6 +3,10 @@
 -- Host: localhost    Database: labsync_db
 -- ------------------------------------------------------
 -- Server version	8.4.7
+--
+-- Después de importar este respaldo base, aplique en orden los archivos de
+-- src/main/resources/DB/migrations. Los horarios UTJ-CCD se incorporan en
+-- 20260722_agregar_horarios_escolares_ccd.sql para preservar bases existentes.
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -71,7 +75,8 @@ CREATE TABLE `bitacora` (
   `observaciones` text,
   `estado` varchar(50) DEFAULT 'Registrado',
   `fecha_registro` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id_bitacora`)
+  PRIMARY KEY (`id_bitacora`),
+  CONSTRAINT `chk_bitacora_maximo_personas` CHECK ((`total_usuarios` between 1 and 31))
 ) ENGINE=MyISAM AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -188,7 +193,7 @@ CREATE TABLE `laboratorios` (
   `estado` varchar(30) NOT NULL DEFAULT 'Disponible',
   PRIMARY KEY (`id_laboratorio`),
   UNIQUE KEY `nombre` (`nombre`)
-) ENGINE=MyISAM AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -197,7 +202,7 @@ CREATE TABLE `laboratorios` (
 
 LOCK TABLES `laboratorios` WRITE;
 /*!40000 ALTER TABLE `laboratorios` DISABLE KEYS */;
-INSERT INTO `laboratorios` VALUES (1,'PB-05',35,'Disponible'),(2,'M-11',35,'Disponible'),(3,'M-12',35,'Disponible'),(4,'M-14',35,'Disponible'),(5,'M-19',35,'Disponible'),(6,'M-02',35,'Disponible'),(7,'M-05',35,'Disponible'),(8,'5-06',35,'Disponible'),(9,'5-03',35,'Disponible'),(10,'M-13',35,'Disponible');
+INSERT INTO `laboratorios` VALUES (2,'M-11',19,'Disponible'),(3,'M-12',12,'Disponible'),(4,'M-14',25,'Disponible'),(6,'M-02',30,'Disponible'),(7,'M-05',27,'Disponible'),(8,'5-06',30,'Disponible'),(9,'5-03',22,'Disponible'),(10,'M-13',20,'Disponible'),(11,'PB-07',20,'Disponible');
 /*!40000 ALTER TABLE `laboratorios` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -333,7 +338,8 @@ CREATE TABLE `reservas` (
   `fecha_registro` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id_reserva`),
   KEY `fk_reservas_usuario` (`id_usuario`),
-  CONSTRAINT `fk_reservas_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuario` (`id`)
+  CONSTRAINT `fk_reservas_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuario` (`id`),
+  CONSTRAINT `chk_reservas_maximo_personas` CHECK ((`cantidad_alumnos` between 1 and 31))
 ) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

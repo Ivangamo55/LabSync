@@ -15,6 +15,7 @@ import labsync.interfaz.mantenimiento.VentanaGestionMantenimiento;
 import labsync.interfaz.fallas.VentanaGestionReportesFallas;
 import labsync.interfaz.reservas.VentanaGestionReservas;
 import labsync.interfaz.autenticacion.VentanaInicioSesion;
+import labsync.interfaz.horarios.VentanaGestionHorarios;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -43,6 +44,7 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
         
         cargarDashboard();
+        agregarAccesoHorarios();
         iniciarActualizacionDashboard();
     }
 
@@ -52,6 +54,7 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
         cargarDashboard();
+        agregarAccesoHorarios();
         iniciarActualizacionDashboard();
     }
     
@@ -62,6 +65,17 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
         cargarUltimosMantenimiento();
         cargarUltimosRegistrosBitacora();
         actualizarContadorAlertas();
+    }
+
+    /** Añade el módulo nuevo sin alterar el bloque generado por NetBeans. */
+    private void agregarAccesoHorarios() {
+        javax.swing.JButton boton=new javax.swing.JButton("Ciclos y horarios");
+        boton.setBackground(java.awt.Color.WHITE); boton.setForeground(new java.awt.Color(6,140,115));
+        boton.setFont(new java.awt.Font("Arial",java.awt.Font.BOLD,14)); boton.setBorderPainted(false);
+        boton.setFocusPainted(false); boton.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        boton.addActionListener(e->new VentanaGestionHorarios().setVisible(true));
+        sidebarVerde.add(boton,new org.netbeans.lib.awtextra.AbsoluteConstraints(20,590,200,50));
+        sidebarVerde.revalidate(); sidebarVerde.repaint();
     }
 
     /** Se agrega fuera del bloque generado para mantener VentanaPanelLaboratorista.form editable. */
@@ -198,8 +212,8 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
         if (java.awt.SystemTray.isSupported()) {
             try {
                 if (iconoNotificaciones == null) {
-                    java.awt.Image imagen = new javax.swing.ImageIcon(getClass().getResource(
-                            "/images/logo_labsync_no_background.png")).getImage();
+                    java.awt.Image imagen = labsync.interfaz.comun.Recursos
+                            .icono("/images/logo_labsync_no_background.png").getImage();
                     iconoNotificaciones = new java.awt.TrayIcon(imagen, "LabSync");
                     iconoNotificaciones.setImageAutoSize(true);
                     iconoNotificaciones.addActionListener(e -> abrirAlertas());

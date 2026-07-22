@@ -21,6 +21,7 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
     private String nombreUsuario;
     private SesionUsuario sesion;
     private final java.util.List<ReservaBitacora> reservasDisponibles = new java.util.ArrayList<>();
+    private final java.util.List<EntradaProgramada> entradasProgramadas = new java.util.ArrayList<>();
     private boolean actualizandoSelector;
 
     public VentanaBitacoraProfesor() {
@@ -93,11 +94,14 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
         txtProfesor.setText(sesion.getNombreCompleto());
         txtRol.setText(sesion.getRol());
         configurarCamposAutomaticos();
-        cmbReservas.addActionListener(e -> seleccionarReserva());
+        lbSubtituloPantalla.setText("Selecciona una clase de hoy o una reserva extraordinaria aprobada.");
+        lbGuia1.setText("<html>1. Selecciona una clase programada o una reserva extraordinaria.</html>");
+        lbGuia3.setText("<html>3. Captura el total de personas, agrega observaciones y guarda.</html>");
+        cmbReservas.addActionListener(e -> seleccionarEntradaProgramada());
         btnLimpiar.addActionListener(e -> cmbReservas.setSelectedIndex(0));
-        btnCargarReserva.addActionListener(e -> cargarReservasAprobadas(idReservaSeleccionada()));
-        btnGuardar.addActionListener(e -> guardarBitacora());
-        cargarReservasAprobadas(idReservaInicial);
+        btnCargarReserva.addActionListener(e -> cargarEntradasProgramadas());
+        btnGuardar.addActionListener(e -> guardarEntradaProgramada());
+        cargarEntradasProgramadas();
     }
 
     private void configurarCamposAutomaticos() {
@@ -109,7 +113,7 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
         cmbGrado.setEnabled(false);
         cmbGrupo.setEnabled(false);
         txtActividad.setEditable(false);
-        txtTotalUsuarios.setEditable(false);
+        txtTotalUsuarios.setEditable(true);
         btnGuardar.setEnabled(false);
     }
 
@@ -129,6 +133,7 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
         String sql = "SELECT id_reserva, laboratorio, actividad, carrera, grado, grupo, turno, fecha, horario, cantidad_alumnos FROM reservas "
                 + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) "
                 + "AND rol_solicitante = 'Profesor' AND estado = 'Aprobada' "
+                + "AND cantidad_alumnos BETWEEN 1 AND 31 "
                 + "AND fecha <= CURRENT_DATE ORDER BY fecha DESC, horario, id_reserva";
         actualizandoSelector = true;
         reservasDisponibles.clear();
@@ -258,6 +263,118 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
         private String descripcion() {
             return String.format("#%d | %s | %s | %s", id, fecha, horario, laboratorio);
         }
+    }
+
+    /** Carga clases regulares del día y conserva las reservas extraordinarias existentes. */
+    private void cargarEntradasProgramadas() {
+        entradasProgramadas.clear();
+        actualizandoSelector = true;
+        cmbReservas.removeAllItems();
+        cmbReservas.addItem("Selecciona una clase o reserva extraordinaria");
+        String clases = "SELECT h.id_horario, c.nombre ciclo, t.nombre carrera, g.cuatrimestre, g.letra, "
+                + "g.turno, m.nombre actividad, l.nombre laboratorio, h.hora_inicio, h.hora_fin "
+                + "FROM horarios_clase h JOIN ciclos_escolares c ON c.id_ciclo=h.id_ciclo "
+                + "JOIN grupos g ON g.id_grupo=h.id_grupo JOIN trayectorias t ON t.id_trayectoria=g.id_trayectoria "
+                + "JOIN plan_materias pm ON pm.id_plan_materia=h.id_plan_materia "
+                + "JOIN materias m ON m.id_materia=pm.id_materia JOIN laboratorios l ON l.id_laboratorio=h.id_laboratorio "
+                + "WHERE h.id_profesor=? AND h.activo=1 AND c.activo=1 AND CURRENT_DATE BETWEEN c.fecha_inicio AND c.fecha_fin "
+                + "AND h.dia_semana=ELT(WEEKDAY(CURRENT_DATE)+1,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo') "
+                + "ORDER BY h.hora_inicio";
+        String reservas = "SELECT id_reserva,fecha,horario,laboratorio,actividad,carrera,grado,grupo,turno,cantidad_alumnos "
+                + "FROM reservas WHERE id_usuario=? AND rol_solicitante='Profesor' AND estado='Aprobada' "
+                + "AND fecha<=CURRENT_DATE ORDER BY fecha,horario";
+        try (java.sql.Connection con=ConexionBaseDatos.conectar()) {
+            if(con==null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
+            try(java.sql.PreparedStatement ps=con.prepareStatement(clases)) {
+                ps.setInt(1,sesion.getId());
+                try(java.sql.ResultSet rs=ps.executeQuery()) {
+                    while(rs.next()) {
+                        String horario=formatearHora(rs.getTime("hora_inicio"))+" - "+formatearHora(rs.getTime("hora_fin"));
+                        EntradaProgramada entrada=new EntradaProgramada(rs.getInt("id_horario"),null,
+                                java.sql.Date.valueOf(java.time.LocalDate.now()),horario,rs.getString("laboratorio"),
+                                rs.getString("actividad"),rs.getString("carrera"),rs.getInt("cuatrimestre")+"°",
+                                rs.getString("letra"),rs.getString("turno"),null);
+                        entradasProgramadas.add(entrada); cmbReservas.addItem("Clase | "+entrada.descripcion());
+                    }
+                }
+            }
+            try(java.sql.PreparedStatement ps=con.prepareStatement(reservas)) {
+                ps.setInt(1,sesion.getId());
+                try(java.sql.ResultSet rs=ps.executeQuery()) {
+                    while(rs.next()) {
+                        EntradaProgramada entrada=new EntradaProgramada(null,rs.getInt("id_reserva"),rs.getDate("fecha"),
+                                rs.getString("horario"),rs.getString("laboratorio"),rs.getString("actividad"),
+                                rs.getString("carrera"),rs.getString("grado"),rs.getString("grupo"),rs.getString("turno"),
+                                rs.getInt("cantidad_alumnos"));
+                        entradasProgramadas.add(entrada); cmbReservas.addItem("Extraordinaria | "+entrada.descripcion());
+                    }
+                }
+            }
+        } catch(java.sql.SQLException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,"No se pudieron consultar las clases:\n"+ex.getMessage(),"Error SQL",javax.swing.JOptionPane.ERROR_MESSAGE);
+        } finally { actualizandoSelector=false; }
+        seleccionarEntradaProgramada();
+    }
+
+    private String formatearHora(java.sql.Time hora) {
+        return String.format("%d:%02d",hora.toLocalTime().getHour(),hora.toLocalTime().getMinute());
+    }
+
+    private void seleccionarEntradaProgramada() {
+        if(actualizandoSelector) return;
+        int indice=cmbReservas.getSelectedIndex()-1;
+        if(indice<0 || indice>=entradasProgramadas.size()) { limpiarDetalle(); return; }
+        EntradaProgramada e=entradasProgramadas.get(indice);
+        dateFecha.setDate(e.fecha()); seleccionarCombo(cmbLaboratorio,e.laboratorio()); txtHorario.setText(e.horario());
+        txtActividad.setText(e.actividad()); txtCarrera.setText(e.carrera()); seleccionarCombo(cmbGrado,e.grado());
+        seleccionarCombo(cmbGrupo,e.grupo()); seleccionarCombo(cmbTurno,e.turno());
+        txtTotalUsuarios.setText(e.totalSugerido()==null?"":String.valueOf(e.totalSugerido()));
+        txtObservaciones.setText(""); btnGuardar.setEnabled(true);
+    }
+
+    private void guardarEntradaProgramada() {
+        int indice=cmbReservas.getSelectedIndex()-1;
+        if(indice<0 || indice>=entradasProgramadas.size()) {
+            javax.swing.JOptionPane.showMessageDialog(this,"Selecciona una clase o reserva.","Dato requerido",javax.swing.JOptionPane.WARNING_MESSAGE); return;
+        }
+        int total;
+        try { total=Integer.parseInt(txtTotalUsuarios.getText().trim()); }
+        catch(NumberFormatException ex) { total=0; }
+        if(total<1 || total>31) {
+            javax.swing.JOptionPane.showMessageDialog(this,"El total debe estar entre 1 y 31 personas, incluido el profesor.","Total inválido",javax.swing.JOptionPane.WARNING_MESSAGE); return;
+        }
+        EntradaProgramada e=entradasProgramadas.get(indice);
+        String insertar="INSERT INTO bitacora(id_horario,id_reserva,fecha,nombre_usuario,rol_usuario,carrera_dependencia,grado,grupo,laboratorio,actividad_materia,turno,horario,total_usuarios,estado,observaciones) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'Registrado',?)";
+        try(java.sql.Connection con=ConexionBaseDatos.conectar()) {
+            if(con==null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
+            con.setAutoCommit(false);
+            try(java.sql.PreparedStatement ps=con.prepareStatement(insertar)) {
+                if(e.idHorario()==null) ps.setNull(1,java.sql.Types.INTEGER); else ps.setInt(1,e.idHorario());
+                if(e.idReserva()==null) ps.setNull(2,java.sql.Types.INTEGER); else ps.setInt(2,e.idReserva());
+                ps.setDate(3,e.fecha()); ps.setString(4,sesion.getNombreCompleto()); ps.setString(5,sesion.getRol());
+                ps.setString(6,e.carrera()); ps.setString(7,e.grado()); ps.setString(8,e.grupo()); ps.setString(9,e.laboratorio());
+                ps.setString(10,e.actividad()); ps.setString(11,e.turno()); ps.setString(12,e.horario()); ps.setInt(13,total);
+                String obs=txtObservaciones.getText().trim(); if(obs.isEmpty()) ps.setNull(14,java.sql.Types.VARCHAR); else ps.setString(14,obs);
+                ps.executeUpdate();
+            }
+            if(e.idReserva()!=null) {
+                try(java.sql.PreparedStatement ps=con.prepareStatement("UPDATE reservas SET estado='Finalizada' WHERE id_reserva=? AND estado='Aprobada'")) {
+                    ps.setInt(1,e.idReserva()); if(ps.executeUpdate()!=1) throw new java.sql.SQLException("La reserva dejó de estar aprobada.");
+                }
+            }
+            con.commit();
+            javax.swing.JOptionPane.showMessageDialog(this,"Registro guardado en la bitácora.","Bitácora",javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            cargarEntradasProgramadas();
+        } catch(java.sql.SQLIntegrityConstraintViolationException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,"Esta clase ya fue registrada en la fecha actual.","Registro duplicado",javax.swing.JOptionPane.WARNING_MESSAGE);
+        } catch(java.sql.SQLException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,"No se pudo guardar la bitácora:\n"+ex.getMessage(),"Error SQL",javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private record EntradaProgramada(Integer idHorario,Integer idReserva,java.sql.Date fecha,String horario,
+            String laboratorio,String actividad,String carrera,String grado,String grupo,String turno,Integer totalSugerido) {
+        private String descripcion() { return actividad+" | "+fecha+" | "+horario+" | "+laboratorio; }
     }
 
     @SuppressWarnings("unchecked")
@@ -516,8 +633,8 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
         panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 281, 390, 28));
         lbTotal.setFont(new java.awt.Font("Arial", 1, 12));
         lbTotal.setForeground(new java.awt.Color(90, 90, 90));
-        lbTotal.setText("Total de usuarios");
-        panelFormulario.add(lbTotal, new org.netbeans.lib.awtextra.AbsoluteConstraints(435, 259, 150, 18));
+        lbTotal.setText("Personas (máximo 31)");
+        panelFormulario.add(lbTotal, new org.netbeans.lib.awtextra.AbsoluteConstraints(435, 259, 180, 18));
         txtTotalUsuarios.setBackground(new java.awt.Color(255, 255, 255));
         txtTotalUsuarios.setFont(new java.awt.Font("Arial", 0, 12));
         txtTotalUsuarios.setForeground(new java.awt.Color(51, 51, 51));

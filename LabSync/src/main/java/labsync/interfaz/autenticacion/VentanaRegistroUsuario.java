@@ -312,6 +312,53 @@ public class VentanaRegistroUsuario extends javax.swing.JFrame {
         // TODO add your handling code here:
     }//GEN-LAST:event_passwordActionPerformed
 
+    private String solicitarMatricula() {
+        javax.swing.JTextField campoMatricula = new javax.swing.JTextField(10);
+        ((javax.swing.text.AbstractDocument) campoMatricula.getDocument()).setDocumentFilter(
+                new javax.swing.text.DocumentFilter() {
+                    @Override
+                    public void replace(FilterBypass fb, int offset, int length, String texto,
+                            javax.swing.text.AttributeSet atributos)
+                            throws javax.swing.text.BadLocationException {
+                        String entrada = texto == null ? "" : texto;
+                        String actual = fb.getDocument().getText(0, fb.getDocument().getLength());
+                        int longitudFinal = actual.length() - length + entrada.length();
+                        if (entrada.matches("\\d*") && longitudFinal <= 10) {
+                            super.replace(fb, offset, length, entrada, atributos);
+                        }
+                    }
+
+                    @Override
+                    public void insertString(FilterBypass fb, int offset, String texto,
+                            javax.swing.text.AttributeSet atributos)
+                            throws javax.swing.text.BadLocationException {
+                        replace(fb, offset, 0, texto, atributos);
+                    }
+                });
+
+        while (true) {
+            int opcion = javax.swing.JOptionPane.showConfirmDialog(
+                    this,
+                    new Object[]{"Ingresa tu matrícula de 10 dígitos:", campoMatricula},
+                    "Matrícula",
+                    javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                    javax.swing.JOptionPane.QUESTION_MESSAGE);
+            if (opcion != javax.swing.JOptionPane.OK_OPTION) {
+                return null;
+            }
+            String matriculaIngresada = campoMatricula.getText().trim();
+            if (matriculaIngresada.matches("\\d{10}")) {
+                return matriculaIngresada;
+            }
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "La matrícula debe contener exactamente 10 dígitos.",
+                    "Matrícula no válida",
+                    javax.swing.JOptionPane.WARNING_MESSAGE);
+            campoMatricula.requestFocusInWindow();
+        }
+    }
+
     /*
         AQUI IRA TODO LA LÓGICA PARA EL REGISTRO DE UN USUARIO NUEVO
         BOTON DE REGISTRO (CREAR CUENTA)
@@ -358,8 +405,8 @@ public class VentanaRegistroUsuario extends javax.swing.JFrame {
         String[] opcionesPiso = {"PB - M", "1 - 5"};
         
         if (rolSeleccionado.equals("Estudiante")) {
-            datoExtra1 = javax.swing.JOptionPane.showInputDialog(this, "Por favor, ingresa tu matrícula");
-            if (datoExtra1 == null || datoExtra1.trim().isEmpty()) return; 
+            datoExtra1 = solicitarMatricula();
+            if (datoExtra1 == null) return;
             
             datoExtra2 = (String) javax.swing.JOptionPane.showInputDialog(this, "Selecciona tu carrera: ", "Carrera", javax.swing.JOptionPane.QUESTION_MESSAGE, null, opcionesCarrera, opcionesCarrera[0]);
             if (datoExtra2 == null) return;
