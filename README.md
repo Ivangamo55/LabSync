@@ -37,7 +37,7 @@ El JAR ejecutable queda en `LabSync/target/LabSync-1.0.jar`.
 2. Importar `LabSync/src/main/resources/DB/labsync_db.sql`.
 3. La configuración actual usa la base `labsync_db`, usuario `root` y
    contraseña vacía; se encuentra en
-   `LabSync/src/main/java/labsync/labsync/ConexionBD.java`.
+   `LabSync/src/main/java/labsync/configuracion/ConexionBaseDatos.java`.
 
 ## Ejecutar la interfaz
 

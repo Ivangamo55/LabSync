@@ -15,7 +15,7 @@ FLUJO DE FUNCIONAMIENTO
 1. El usuario escribe su correo y contraseña en la pantalla de inicio de
    sesion.
 
-2. Login.java consulta la tabla usuario de la base de datos.
+2. VentanaInicioSesion.java consulta la tabla usuario de la base de datos.
 
 3. Si las credenciales son correctas, la base de datos devuelve:
 
@@ -24,7 +24,7 @@ FLUJO DE FUNCIONAMIENTO
    - Su nombre completo.
    - Su rol.
 
-4. Login.java crea un objeto SesionUsuario con esos datos.
+4. VentanaInicioSesion.java crea un objeto SesionUsuario con esos datos.
 
 5. El mismo objeto se pasa entre las diferentes ventanas de Profesor.
 
@@ -33,7 +33,7 @@ FLUJO DE FUNCIONAMIENTO
 
 El flujo se puede resumir asi:
 
-Login consulta la BD -> obtiene el ID -> SesionUsuario conserva el ID
+VentanaInicioSesion consulta la base de datos -> obtiene el ID -> SesionUsuario conserva el ID
 -> las pantallas consultan la BD utilizando ese ID
 
 
@@ -69,7 +69,7 @@ QUE INFORMACION SIGUE EN LA BASE DE DATOS
 Las reservas, reportes de fallas, usuarios, laboratorios, bitacoras y demas
 registros siguen almacenados en MySQL.
 
-Las pantallas continúan utilizando ConexionBD para leer y guardar esa
+Las pantallas continúan utilizando ConexionBaseDatos para leer y guardar esa
 informacion. SesionUsuario solamente indica cual usuario autenticado esta
 realizando cada operacion.
 

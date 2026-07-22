@@ -32,7 +32,7 @@
         <!-- Java 17 is an LTS release commonly available in CI and browser
              workspaces. The application does not require newer language APIs. -->
         <maven.compiler.release>17</maven.compiler.release>
-        <exec.mainClass>labsync.labsync.LabSync</exec.mainClass>
+        <exec.mainClass>labsync.aplicacion.AplicacionLabSync</exec.mainClass>
     </properties>
     <build>
         <plugins>

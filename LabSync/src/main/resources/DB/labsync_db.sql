@@ -197,7 +197,7 @@ CREATE TABLE `laboratorios` (
 
 LOCK TABLES `laboratorios` WRITE;
 /*!40000 ALTER TABLE `laboratorios` DISABLE KEYS */;
-INSERT INTO `laboratorios` VALUES (1,'PB-05',20,'Disponible'),(2,'M-11',20,'Disponible'),(3,'M-12',20,'Disponible'),(4,'M-14',20,'Disponible'),(5,'M-19',20,'Disponible'),(6,'M-02',30,'Disponible'),(7,'M-05',20,'Disponible'),(8,'5-06',20,'Disponible'),(9,'5-03',20,'Disponible'),(10,'M-13',20,'Disponible');
+INSERT INTO `laboratorios` VALUES (1,'PB-05',35,'Disponible'),(2,'M-11',35,'Disponible'),(3,'M-12',35,'Disponible'),(4,'M-14',35,'Disponible'),(5,'M-19',35,'Disponible'),(6,'M-02',35,'Disponible'),(7,'M-05',35,'Disponible'),(8,'5-06',35,'Disponible'),(9,'5-03',35,'Disponible'),(10,'M-13',35,'Disponible');
 /*!40000 ALTER TABLE `laboratorios` ENABLE KEYS */;
 UNLOCK TABLES;
 

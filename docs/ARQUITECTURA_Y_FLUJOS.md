@@ -1,13 +1,13 @@
-# LabSync: arquitectura y flujos
+# AplicacionLabSync: arquitectura y flujos
 
-Este documento describe visualmente cómo funciona LabSync a partir del código actual. LabSync es una aplicación de escritorio Java Swing que centraliza reservas de laboratorios, bitácoras de uso, inventario, reportes de fallas y mantenimientos.
+Este documento describe visualmente cómo funciona AplicacionLabSync a partir del código actual. AplicacionLabSync es una aplicación de escritorio Java Swing que centraliza reservas de laboratorios, bitácoras de uso, inventario, reportes de fallas y mantenimientos.
 
 ## Vista general
 
 ```mermaid
 flowchart LR
     U[Usuario] --> UI[Interfaz Java Swing]
-    UI --> AUTH[Login y sesión]
+    UI --> AUTH[VentanaInicioSesion y sesión]
     UI --> RULES[Reglas de disponibilidad]
     UI --> JDBC[JDBC / consultas preparadas]
     RULES --> JDBC
@@ -21,17 +21,17 @@ flowchart LR
     end
 ```
 
-La clase `LabSync` es el punto de entrada y abre `Login`. Las ventanas Swing contienen actualmente buena parte de la lógica de presentación y acceso a datos. `ConexionBD` crea las conexiones JDBC, mientras que `DisponibilidadService` y `MantenimientoService` concentran reglas compartidas de sus respectivos dominios.
+La clase `AplicacionLabSync` es el punto de entrada y abre `VentanaInicioSesion`. Las ventanas Swing contienen actualmente buena parte de la lógica de presentación y acceso a datos. `ConexionBaseDatos` crea las conexiones JDBC, mientras que `ServicioDisponibilidad` y `ServicioMantenimiento` concentran reglas compartidas de sus respectivos dominios.
 
 ## Navegación por rol
 
 ```mermaid
 flowchart TD
-    START[LabSync.main] --> LOGIN[Inicio de sesión]
+    START[AplicacionLabSync.main] --> LOGIN[Inicio de sesión]
     LOGIN -->|Credenciales inválidas| LOGIN
-    LOGIN -->|Estudiante| DA[DashboardAlumno]
-    LOGIN -->|Profesor| DP[DashboardProfesor]
-    LOGIN -->|Laboratorista| DL[DashboardLabo]
+    LOGIN -->|Estudiante| DA[VentanaPanelAlumno]
+    LOGIN -->|Profesor| DP[VentanaPanelProfesor]
+    LOGIN -->|Laboratorista| DL[VentanaPanelLaboratorista]
     LOGIN -->|Externo| EXT[Mensaje: interfaz no implementada]
 
     DA --> RA[Solicitar reserva individual]
@@ -61,7 +61,7 @@ El registro crea primero un `usuario` y después, dentro de la misma transacció
 sequenceDiagram
     actor Sol as Alumno o profesor
     participant UI as Ventana de reservas
-    participant Disp as DisponibilidadService
+    participant Disp as ServicioDisponibilidad
     participant DB as Base de datos
     actor Lab as Laboratorista
 
@@ -73,7 +73,7 @@ sequenceDiagram
     Disp-->>UI: Disponible / motivo del bloqueo
     alt Disponible
         UI->>DB: INSERT reserva (Pendiente)
-        DB-->>UI: Reserva registrada
+        DB-->>UI: VentanaGestionReservas registrada
         Lab->>UI: Revisa la solicitud
         UI->>Disp: Validar de nuevo con bloqueo
         alt Sigue disponible
@@ -112,7 +112,7 @@ flowchart LR
     MT -. identifica por código .-> INV
 ```
 
-`MantenimientoService` coordina la creación o edición del mantenimiento y el estado del equipo. Las operaciones que afectan mantenimiento e inventario se ejecutan transaccionalmente. El módulo de inventario permite altas, modificaciones, consultas y baja lógica mediante el estado `Dado de baja`.
+`ServicioMantenimiento` coordina la creación o edición del mantenimiento y el estado del equipo. Las operaciones que afectan mantenimiento e inventario se ejecutan transaccionalmente. El módulo de inventario permite altas, modificaciones, consultas y baja lógica mediante el estado `Dado de baja`.
 
 ## Modelo de datos simplificado
 
@@ -182,12 +182,12 @@ erDiagram
 
 | Área | Clases principales | Responsabilidad |
 |---|---|---|
-| Arranque y acceso | `LabSync`, `Login`, `Register`, `SesionUsuario` | Inicio, autenticación, registro y contexto del usuario |
-| Alumno | `DashboardAlumno`, `ReservasAlumno`, `ReporteFallasAlumno` | Reservas individuales y fallas propias |
-| Profesor | `DashboardProfesor`, `ReservasProfesor`, `MisReservasProfesor`, `BitacoraProfesor`, `ReporteFallasProfesor` | Reservas de grupo, bitácora y fallas |
-| Laboratorista | `DashboardLabo`, `Reserva`, `Bitacora`, `Inventario`, `Mantenimiento`, `ReporteFalla` | Operación y supervisión de laboratorios |
-| Servicios | `DisponibilidadService`, `MantenimientoService`, `LaboratoriosBD`, `ValidacionFechas` | Reglas reutilizables y consultas auxiliares |
-| Persistencia | `ConexionBD` | Conexión JDBC directa a MySQL/MariaDB |
+| Arranque y acceso | `AplicacionLabSync`, `VentanaInicioSesion`, `VentanaRegistroUsuario`, `SesionUsuario` | Inicio, autenticación, registro y contexto del usuario |
+| Alumno | `VentanaPanelAlumno`, `VentanaReservasAlumno`, `VentanaReporteFallaAlumno` | Reservas individuales y fallas propias |
+| Profesor | `VentanaPanelProfesor`, `VentanaReservasProfesor`, `VentanaMisReservasProfesor`, `VentanaBitacoraProfesor`, `VentanaReporteFallaProfesor` | Reservas de grupo, bitácora y fallas |
+| Laboratorista | `VentanaPanelLaboratorista`, `VentanaGestionReservas`, `VentanaBitacoraGeneral`, `VentanaGestionInventario`, `VentanaGestionMantenimiento`, `VentanaGestionReportesFallas` | Operación y supervisión de laboratorios |
+| Servicios | `ServicioDisponibilidad`, `ServicioMantenimiento`, `CatalogoLaboratorios`, `ValidacionFechas` | Reglas reutilizables y consultas auxiliares |
+| Persistencia | `ConexionBaseDatos` | Conexión JDBC directa a MySQL/MariaDB |
 
 Los archivos `.form` son metadatos del diseñador visual de NetBeans asociados a varias ventanas Swing. Las imágenes de la interfaz están en `src/main/resources/images` y el esquema de base de datos está en `src/main/resources/DB/labsync_db.sql`.
 
@@ -197,7 +197,7 @@ Los archivos `.form` son metadatos del diseñador visual de NetBeans asociados a
 flowchart LR
     SRC[Código Java + recursos] --> MVN[Maven Wrapper\nclean verify]
     MVN --> SHADE[maven-shade-plugin]
-    SHADE --> JAR[LabSync/target/LabSync-1.0.jar]
+    SHADE --> JAR[AplicacionLabSync/target/AplicacionLabSync-1.0.jar]
     JAR --> JVM[JDK 17+ con entorno gráfico]
     JVM --> MYSQL[(MySQL/MariaDB localhost:3306)]
 ```
@@ -206,7 +206,7 @@ Desde la raíz, en Windows:
 
 ```powershell
 .\mvnw.cmd clean verify
-java -jar .\LabSync\target\LabSync-1.0.jar
+java -jar .\AplicacionLabSync\target\AplicacionLabSync-1.0.jar
 ```
 
 La configuración actual conecta a `jdbc:mysql://localhost:3306/labsync_db` con el usuario `root` y contraseña vacía. Para un despliegue real conviene externalizar estos valores. Las contraseñas de usuarios se comparan mediante hash SHA-256; al no usar sal individual ni un algoritmo adaptativo, también conviene migrarlas a Argon2, scrypt o bcrypt.
@@ -215,7 +215,7 @@ La configuración actual conecta a `jdbc:mysql://localhost:3306/labsync_db` con 
 
 - El rol `Externo` se puede registrar, pero su interfaz posterior al inicio de sesión aún no está implementada.
 - No existe una capa DAO/repositorio separada: muchas ventanas ejecutan SQL directamente.
-- La configuración de base de datos está incrustada en `ConexionBD`.
+- La configuración de base de datos está incrustada en `ConexionBaseDatos`.
 - Varias relaciones se guardan además como texto (por ejemplo, el nombre del laboratorio), lo que simplifica reportes pero requiere cuidar la consistencia.
 - `laboratorios` usa MyISAM en el script, por lo que no participa en transacciones ni admite claves foráneas como las tablas InnoDB.
 
