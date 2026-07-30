@@ -86,7 +86,7 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
 
     private void iniciarActualizacionAutomatica() {
         new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT id_falla, DATE_FORMAT(fecha_reporte, '%Y-%m-%d %H:%i:%s') fecha_reporte, codigo_equipo, nombre_equipo, laboratorio, descripcion_falla, prioridad, estado, reportado_por, IFNULL(observaciones, '') observaciones FROM reporte_fallas WHERE estado NOT IN ('Atendida', 'Cancelada') ORDER BY fecha_reporte DESC",
+                "SELECT f.id_falla,DATE_FORMAT(f.fecha_reporte,'%Y-%m-%d %H:%i:%s') fecha_reporte,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,f.descripcion_falla,f.prioridad,f.estado,CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) reportado_por,IFNULL(f.observaciones,'') observaciones FROM reporte_fallas f LEFT JOIN usuario u ON u.id=f.id_usuario LEFT JOIN inventario i ON i.id_inventario=f.id_inventario JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio WHERE f.estado NOT IN ('Atendida','Cancelada') ORDER BY f.fecha_reporte DESC",
                 new String[]{"ID", "Fecha", "Código Equipo", "Nombre Equipo", "Laboratorio", "Falla", "Prioridad", "Estado", "Reportado Por", "Observaciones"},
                 new String[]{"id_falla", "fecha_reporte", "codigo_equipo", "nombre_equipo", "laboratorio", "descripcion_falla", "prioridad", "estado", "reportado_por", "observaciones"}),
                 modelo -> { tablaReportes.setModel(modelo); ocultarColumnaID(); });
@@ -151,14 +151,11 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
         modelo.addColumn("Reportado Por");
         modelo.addColumn("Observaciones");
         
-        String sql = "SELECT id_falla, "
-            + "DATE_FORMAT(fecha_reporte, '%Y-%m-%d %H:%i:%s') AS fecha_reporte, "
-            + "codigo_equipo, nombre_equipo, laboratorio, descripcion_falla, "
-            + "prioridad, estado, reportado_por, "
-            + "IFNULL(observaciones, '') AS observaciones "
-            + "FROM reporte_fallas "
-            + "WHERE estado NOT IN ('Atendida', 'Cancelada') "
-            + "ORDER BY fecha_reporte DESC";
+        String sql = "SELECT f.id_falla,DATE_FORMAT(f.fecha_reporte,'%Y-%m-%d %H:%i:%s') fecha_reporte,"
+            + "i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,f.descripcion_falla,f.prioridad,f.estado,"
+            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) reportado_por,IFNULL(f.observaciones,'') observaciones "
+            + "FROM reporte_fallas f LEFT JOIN usuario u ON u.id=f.id_usuario LEFT JOIN inventario i ON i.id_inventario=f.id_inventario "
+            + "JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio WHERE f.estado NOT IN ('Atendida','Cancelada') ORDER BY f.fecha_reporte DESC";
         
         try {
             PreparedStatement ps = con.prepareStatement(sql);
@@ -241,18 +238,17 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
             textoBusqueda = "";
         }
         
-        String sql = "SELECT id_falla, "
-            + "DATE_FORMAT(fecha_reporte, '%Y-%m-%d %H:%i:%s') AS fecha_reporte, "
-            + "codigo_equipo, nombre_equipo, laboratorio, descripcion_falla, "
-            + "prioridad, estado, reportado_por, "
-            + "IFNULL(observaciones, '') AS observaciones "
-            + "FROM reporte_fallas WHERE 1=1 ";
+        String sql = "SELECT f.id_falla,DATE_FORMAT(f.fecha_reporte,'%Y-%m-%d %H:%i:%s') fecha_reporte,"
+            + "i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,f.descripcion_falla,f.prioridad,f.estado,"
+            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) reportado_por,IFNULL(f.observaciones,'') observaciones "
+            + "FROM reporte_fallas f LEFT JOIN usuario u ON u.id=f.id_usuario LEFT JOIN inventario i ON i.id_inventario=f.id_inventario "
+            + "JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio WHERE 1=1 ";
         
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
         if (!textoBusqueda.isEmpty()) {
-            sql += "AND (codigo_equipo LIKE ? OR nombre_equipo LIKE ? OR laboratorio LIKE ? "
-                + "OR reportado_por LIKE ? OR descripcion_falla LIKE ?) ";
+            sql += "AND (i.codigo LIKE ? OR i.nombre_equipo LIKE ? OR l.nombre LIKE ? "
+                + "OR CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) LIKE ? OR f.descripcion_falla LIKE ?) ";
 
             String busqueda = "%" + textoBusqueda + "%";
             
@@ -264,15 +260,15 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
         }
         
         if (!laboratorioSeleccionado.equals("Todos")) {
-            sql += "AND laboratorio = ?";
+            sql += "AND l.nombre = ?";
             parametros.add(laboratorioSeleccionado);
         }
         
         if (!estadoSeleccionado.equals("Todos")) {
-            sql += "AND estado = ?";
+            sql += "AND f.estado = ?";
             parametros.add(estadoSeleccionado);
         } else {
-            sql += "AND estado NOT IN ('Atendida', 'Cancelada')";
+            sql += "AND f.estado NOT IN ('Atendida', 'Cancelada')";
         }
         
         if (!prioridadSeleccionada.equals("Todos")) {
@@ -339,13 +335,11 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
             return;
         }
         
-        String sql = "SELECT id_falla, codigo_equipo, nombre_equipo, laboratorio, "
-            + "reportado_por, rol_reportante, descripcion_falla, prioridad, estado, "
-            + "DATE_FORMAT(fecha_reporte, '%Y-%m-%d %H:%i:%s') AS fecha_reporte, "
-            + "IFNULL(DATE_FORMAT(fecha_revision, '%Y-%m-%d'), 'Sin revisión') AS fecha_revision, "
-            + "IFNULL(observaciones, '') AS observaciones "
-            + "FROM reporte_fallas "
-            + "WHERE id_falla = ?";
+        String sql = "SELECT f.id_falla,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,"
+            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) reportado_por,u.rol rol_reportante,f.descripcion_falla,f.prioridad,f.estado,"
+            + "DATE_FORMAT(f.fecha_reporte,'%Y-%m-%d %H:%i:%s') fecha_reporte,IFNULL(DATE_FORMAT(f.fecha_revision,'%Y-%m-%d'),'Sin revisión') fecha_revision,"
+            + "IFNULL(f.observaciones,'') observaciones FROM reporte_fallas f LEFT JOIN usuario u ON u.id=f.id_usuario "
+            + "LEFT JOIN inventario i ON i.id_inventario=f.id_inventario JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio WHERE f.id_falla=?";
         
         try {
             PreparedStatement ps = con.prepareStatement(sql);
@@ -624,30 +618,22 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
         }
 
         String sql = "SELECT "
-            + "id_falla, "
-            + "DATE_FORMAT(fecha_reporte, '%d/%m/%Y %H:%i:%s') AS fecha_reporte, "
-            + "codigo_equipo, "
-            + "nombre_equipo, "
-            + "laboratorio, "
-            + "reportado_por, "
-            + "rol_reportante, "
-            + "descripcion_falla, "
-            + "prioridad, "
-            + "estado, "
+            + "f.id_falla, "
+            + "DATE_FORMAT(f.fecha_reporte, '%d/%m/%Y %H:%i:%s') AS fecha_reporte, "
+            + "i.codigo codigo_equipo, i.nombre_equipo, l.nombre laboratorio, "
+            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) reportado_por, "
+            + "u.rol rol_reportante, f.descripcion_falla, f.prioridad, f.estado, "
             + "IFNULL(DATE_FORMAT(fecha_revision, '%d/%m/%Y'), 'Sin revisi\u00F3n') AS fecha_revision, "
-            + "IFNULL(observaciones, '') AS observaciones "
-            + "FROM reporte_fallas "
+            + "IFNULL(f.observaciones, '') AS observaciones "
+            + "FROM reporte_fallas f LEFT JOIN usuario u ON u.id=f.id_usuario LEFT JOIN inventario i ON i.id_inventario=f.id_inventario JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio "
             + "WHERE 1=1 ";
 
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
 
         if (!textoBusqueda.isEmpty()) {
-            sql += "AND (codigo_equipo LIKE ? "
-                + "OR nombre_equipo LIKE ? "
-                + "OR laboratorio LIKE ? "
-                + "OR reportado_por LIKE ? "
-                + "OR rol_reportante LIKE ? "
-                + "OR descripcion_falla LIKE ?) ";
+            sql += "AND (i.codigo LIKE ? OR i.nombre_equipo LIKE ? OR l.nombre LIKE ? "
+                + "OR CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) LIKE ? "
+                + "OR u.rol LIKE ? OR f.descripcion_falla LIKE ?) ";
 
             String busqueda = "%" + textoBusqueda + "%";
 
@@ -660,15 +646,15 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
         }
 
         if (!laboratorioSeleccionado.equals("Todos")) {
-            sql += "AND laboratorio = ? ";
+            sql += "AND l.nombre = ? ";
             parametros.add(laboratorioSeleccionado);
         }
 
         if (!estadoSeleccionado.equals("Todos")) {
-            sql += "AND estado = ? ";
+            sql += "AND f.estado = ? ";
             parametros.add(estadoSeleccionado);
         } else {
-            sql += "AND estado NOT IN ('Atendida', 'Cancelada') ";
+            sql += "AND f.estado NOT IN ('Atendida', 'Cancelada') ";
         }
 
         if (!prioridadSeleccionada.equals("Todos")) {
@@ -1205,7 +1191,7 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
         cmbPrioridad.setBackground(new java.awt.Color(255, 255, 255));
         cmbPrioridad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         cmbPrioridad.setForeground(new java.awt.Color(102, 102, 102));
-        cmbPrioridad.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "Baja", "Media", "Alta", "Urgente" }));
+        cmbPrioridad.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "Baja", "Media", "Alta", "Crítica" }));
         cmbPrioridad.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         cmbPrioridad.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         header.add(cmbPrioridad, new org.netbeans.lib.awtextra.AbsoluteConstraints(720, 80, 170, 30));

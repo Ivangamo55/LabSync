@@ -168,7 +168,7 @@ public final class DialogoAlertas extends JDialog {
                 if (!selected) {
                     int modelRow = table.convertRowIndexToModel(row);
                     String prioridad = String.valueOf(modelo.getValueAt(modelRow, 0));
-                    setBackground("Critica".equals(prioridad) ? new Color(255, 239, 239)
+                    setBackground("Crítica".equals(prioridad) ? new Color(255, 239, 239)
                             : (row % 2 == 0 ? Color.WHITE : new Color(249, 250, 251)));
                     setForeground(Color.DARK_GRAY);
                 }
@@ -212,7 +212,7 @@ public final class DialogoAlertas extends JDialog {
 
     private void actualizarModelo() {
         modelo.setRowCount(0);
-        long criticas = alertas.stream().filter(a -> "Critica".equals(a.prioridad())).count();
+        long criticas = alertas.stream().filter(a -> "Crítica".equals(a.prioridad())).count();
         for (Alerta alerta : alertas) {
             modelo.addRow(new Object[]{alerta.prioridad(), nombreTipo(alerta.tipo()),
                 alerta.titulo(), alerta.fechaCreacion() == null

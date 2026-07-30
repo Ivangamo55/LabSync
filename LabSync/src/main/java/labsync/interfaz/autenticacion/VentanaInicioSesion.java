@@ -279,7 +279,7 @@ public class VentanaInicioSesion extends javax.swing.JFrame {
                     
                     switch (rolUsuario) {
                         case "Estudiante":
-                            VentanaPanelAlumno ventanaAlumno = new VentanaPanelAlumno(strNombre);
+                            VentanaPanelAlumno ventanaAlumno = new VentanaPanelAlumno(sesion);
                             ventanaAlumno.setLocationRelativeTo(null);
                             ventanaAlumno.setVisible(true);
                             this.dispose();

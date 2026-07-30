@@ -51,9 +51,9 @@ public final class ServicioMantenimiento {
     }
 
     private void insertar(Connection conexion, DatosMantenimiento datos) throws SQLException {
-        String sql = "INSERT INTO mantenimiento (codigo_equipo, nombre_equipo, laboratorio, "
-                + "tipo_mantenimiento, fecha_programada, estado, responsable, observaciones) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO mantenimiento (id_inventario, tipo_mantenimiento, "
+                + "fecha_programada, estado, responsable, observaciones) "
+                + "SELECT id_inventario, ?, ?, ?, ?, ? FROM inventario WHERE codigo = ?";
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             asignarDatos(ps, datos);
             ps.executeUpdate();
@@ -61,12 +61,12 @@ public final class ServicioMantenimiento {
     }
 
     private void actualizar(Connection conexion, DatosMantenimiento datos, int id) throws SQLException {
-        String sql = "UPDATE mantenimiento SET codigo_equipo = ?, nombre_equipo = ?, laboratorio = ?, "
-                + "tipo_mantenimiento = ?, fecha_programada = ?, estado = ?, responsable = ?, "
-                + "observaciones = ? WHERE id_mantenimiento = ?";
+        String sql = "UPDATE mantenimiento m JOIN inventario i ON i.codigo=? "
+                + "SET m.id_inventario=i.id_inventario, m.tipo_mantenimiento=?, m.fecha_programada=?, "
+                + "m.estado=?, m.responsable=?, m.observaciones=? WHERE m.id_mantenimiento=?";
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             asignarDatos(ps, datos);
-            ps.setInt(9, id);
+            ps.setInt(7, id);
             if (ps.executeUpdate() == 0) {
                 throw new SQLException("No se encontró el mantenimiento seleccionado.");
             }
@@ -74,14 +74,12 @@ public final class ServicioMantenimiento {
     }
 
     private void asignarDatos(PreparedStatement ps, DatosMantenimiento datos) throws SQLException {
-        ps.setString(1, datos.codigoEquipo);
-        ps.setString(2, "N/A");
-        ps.setString(3, datos.laboratorio);
-        ps.setString(4, datos.tipoMantenimiento);
-        ps.setDate(5, Date.valueOf(datos.fechaProgramada));
-        ps.setString(6, datos.estado);
-        ps.setString(7, datos.responsable);
-        ps.setString(8, datos.observaciones);
+        ps.setString(1, datos.tipoMantenimiento);
+        ps.setDate(2, Date.valueOf(datos.fechaProgramada));
+        ps.setString(3, datos.estado);
+        ps.setString(4, datos.responsable);
+        ps.setString(5, datos.observaciones);
+        ps.setString(6, datos.codigoEquipo);
     }
 
     private void actualizarEstado(Connection conexion, int id, String estado) throws SQLException {

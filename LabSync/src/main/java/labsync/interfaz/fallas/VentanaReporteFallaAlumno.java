@@ -9,6 +9,7 @@ import labsync.interfaz.comun.ValidacionFechas;
 import labsync.interfaz.autenticacion.VentanaInicioSesion;
 import labsync.interfaz.panel.VentanaPanelAlumno;
 import labsync.interfaz.reservas.VentanaReservasAlumno;
+import labsync.modelo.SesionUsuario;
 
 import java.awt.Color;
 import java.awt.Component;
@@ -32,7 +33,8 @@ import javax.swing.table.DefaultTableModel;
 public class VentanaReporteFallaAlumno extends javax.swing.JFrame {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaReporteFallaAlumno.class.getName());
-    private String nombreUsuario;
+    private final String nombreUsuario;
+    private final SesionUsuario sesion;
     private static final String PH_EQUIPO = "Ingresa el código asignado por la escuela";
     private static final String PH_DESCRIPCION = "Describe que ocurre, cuando empezo y si impide usar el equipo.";
 
@@ -41,25 +43,32 @@ public class VentanaReporteFallaAlumno extends javax.swing.JFrame {
     }
 
     public VentanaReporteFallaAlumno(String nombreRecibido) {
+        this(SesionUsuario.buscarEstudiante(nombreRecibido));
+    }
+
+    public VentanaReporteFallaAlumno(SesionUsuario sesion) {
+        this.sesion = sesion == null
+                ? new SesionUsuario(0, "Usuario", "Usuario", "Estudiante")
+                : sesion;
         initComponents();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
-        this.nombreUsuario = nombreRecibido == null || nombreRecibido.isBlank() ? "Usuario" : nombreRecibido;
+        this.nombreUsuario = this.sesion.getNombre();
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
         configurarDateChooser();
         configurarFormulario();
         CatalogoLaboratorios.cargarDisponibles(cmbLaboratorio, "Selecciona laboratorio");
         cargarReportesRecientes();
-        labsync.interfaz.comun.NotificacionesGlobales.alumno(this, headerBlanco, nombreUsuario);
+        labsync.interfaz.comun.NotificacionesGlobales.alumno(this, headerBlanco, this.sesion);
         iniciarActualizacionAutomatica();
         setLocationRelativeTo(null);
     }
 
     private void iniciarActualizacionAutomatica() {
         new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT id_falla, DATE(fecha_reporte) fecha, laboratorio, COALESCE(NULLIF(codigo_equipo, ''), nombre_equipo, 'Sin especificar') equipo, estado FROM reporte_fallas WHERE SUBSTRING_INDEX(TRIM(reportado_por), ' ', 1) = ? ORDER BY fecha_reporte DESC LIMIT 5",
+                "SELECT f.id_falla, DATE(f.fecha_reporte) fecha, l.nombre laboratorio, COALESCE(i.codigo,i.nombre_equipo,'Sin especificar') equipo, f.estado FROM reporte_fallas f JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio LEFT JOIN inventario i ON i.id_inventario=f.id_inventario WHERE f.id_usuario=? ORDER BY f.fecha_reporte DESC LIMIT 5",
                 new String[]{"ID", "Fecha", "Laboratorio", "Equipo", "Estado"},
                 new String[]{"id_falla", "fecha", "laboratorio", "equipo", "estado"},
-                ps -> ps.setString(1, nombreUsuario)),
+                ps -> ps.setInt(1, this.sesion.getId())),
                 modelo -> { tablaReportes.setModel(modelo); ocultarColumnaId(); });
     }
 
@@ -119,10 +128,10 @@ public class VentanaReporteFallaAlumno extends javax.swing.JFrame {
     private void cargarReportesRecientes() {
         DefaultTableModel modelo = (DefaultTableModel) tablaReportes.getModel();
         modelo.setRowCount(0);
-        String sql = "SELECT id_falla, DATE(fecha_reporte) fecha, laboratorio, "
-            + "COALESCE(NULLIF(codigo_equipo, ''), nombre_equipo, 'Sin especificar') equipo, estado "
-            + "FROM reporte_fallas WHERE SUBSTRING_INDEX(TRIM(reportado_por), ' ', 1) = ? "
-            + "ORDER BY fecha_reporte DESC LIMIT 5";
+        String sql = "SELECT f.id_falla, DATE(f.fecha_reporte) fecha, l.nombre laboratorio, "
+            + "COALESCE(i.codigo,i.nombre_equipo,'Sin especificar') equipo, f.estado FROM reporte_fallas f "
+            + "JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio "
+            + "LEFT JOIN inventario i ON i.id_inventario=f.id_inventario WHERE f.id_usuario=? ORDER BY f.fecha_reporte DESC LIMIT 5";
         try (Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) {
                 return;
@@ -203,18 +212,15 @@ public class VentanaReporteFallaAlumno extends javax.swing.JFrame {
             LocalDate fecha = new java.sql.Date(dateFechaFalla.getDate().getTime()).toLocalDate();
             LocalTime hora = fecha.equals(LocalDate.now()) ? LocalTime.now() : LocalTime.NOON;
             String descripcion = "[Tipo: " + cmbTipoFalla.getSelectedItem() + "] " + txtDescripcion.getText().trim();
-            String sql = "INSERT INTO reporte_fallas (id_usuario, codigo_equipo, nombre_equipo, "
-                + "laboratorio, reportado_por, rol_reportante, descripcion_falla, estado, fecha_reporte) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
+            String sql = "INSERT INTO reporte_fallas (id_usuario,id_inventario,id_laboratorio,descripcion_falla,estado,fecha_reporte) "
+                + "SELECT ?,i.id_inventario,l.id_laboratorio,?,'Pendiente',? FROM laboratorios l "
+                + "LEFT JOIN inventario i ON i.codigo=? AND i.id_laboratorio=l.id_laboratorio WHERE l.nombre=?";
             try (PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setInt(1, usuario.idUsuario);
-                ps.setString(2, codigoEquipo);
-                ps.setNull(3, java.sql.Types.VARCHAR);
-                ps.setString(4, laboratorio);
-                ps.setString(5, usuario.nombreCompleto);
-                ps.setString(6, usuario.rol);
-                ps.setString(7, descripcion);
-                ps.setTimestamp(8, Timestamp.valueOf(fecha.atTime(hora)));
+                ps.setString(2, descripcion);
+                ps.setTimestamp(3, Timestamp.valueOf(fecha.atTime(hora)));
+                ps.setString(4, codigoEquipo);
+                ps.setString(5, laboratorio);
                 ps.executeUpdate();
             }
             JOptionPane.showMessageDialog(this, "El reporte fue enviado y quedo Pendiente de revision.",
@@ -228,9 +234,9 @@ public class VentanaReporteFallaAlumno extends javax.swing.JFrame {
 
     private DatosUsuario obtenerDatosUsuario(Connection con) throws SQLException {
         String sql = "SELECT id, CONCAT_WS(' ', nombre, apellido_p, apellido_m) nombre_completo, rol "
-            + "FROM usuario WHERE nombre = ? LIMIT 1";
+            + "FROM usuario WHERE id = ? AND rol = 'Estudiante'";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, nombreUsuario);
+            ps.setInt(1, sesion.getId());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) return new DatosUsuario(rs.getInt("id"), rs.getString("nombre_completo"), rs.getString("rol"));
             }
@@ -254,16 +260,15 @@ public class VentanaReporteFallaAlumno extends javax.swing.JFrame {
         }
         int modeloFila = tablaReportes.convertRowIndexToModel(fila);
         int idFalla = ((Number) tablaReportes.getModel().getValueAt(modeloFila, 0)).intValue();
-        String sql = "SELECT fecha_reporte, laboratorio, "
-            + "COALESCE(NULLIF(codigo_equipo, ''), nombre_equipo, 'Sin especificar') equipo, "
-            + "descripcion_falla, prioridad, estado, "
-            + "COALESCE(observaciones, 'Sin observaciones') observaciones FROM reporte_fallas WHERE id_falla = ? "
-            + "AND SUBSTRING_INDEX(TRIM(reportado_por), ' ', 1) = ?";
+        String sql = "SELECT f.fecha_reporte,l.nombre laboratorio,COALESCE(i.codigo,i.nombre_equipo,'Sin especificar') equipo, "
+            + "f.descripcion_falla,f.prioridad,f.estado,COALESCE(f.observaciones,'Sin observaciones') observaciones "
+            + "FROM reporte_fallas f JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio "
+            + "LEFT JOIN inventario i ON i.id_inventario=f.id_inventario WHERE f.id_falla=? AND f.id_usuario=?";
         try (Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) { mostrarErrorConexion(); return; }
             try (PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setInt(1, idFalla);
-                ps.setString(2, nombreUsuario);
+                ps.setInt(2, sesion.getId());
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         String detalle = "Fecha: " + rs.getTimestamp("fecha_reporte") + "\nLaboratorio: " + rs.getString("laboratorio")
@@ -282,12 +287,12 @@ public class VentanaReporteFallaAlumno extends javax.swing.JFrame {
     }
 
     private void abrirReservas() {
-        new VentanaReservasAlumno(nombreUsuario).setVisible(true);
+        new VentanaReservasAlumno(sesion).setVisible(true);
         dispose();
     }
 
     private void abrirMisReservas() {
-        VentanaPanelAlumno dashboard = new VentanaPanelAlumno(nombreUsuario);
+        VentanaPanelAlumno dashboard = new VentanaPanelAlumno(sesion);
         dashboard.setVisible(true);
         dispose();
     }
@@ -301,7 +306,7 @@ public class VentanaReporteFallaAlumno extends javax.swing.JFrame {
     }
 
     private void asignarUsuario(PreparedStatement ps) throws SQLException {
-        ps.setString(1, nombreUsuario);
+        ps.setInt(1, sesion.getId());
     }
 
     private void mostrarErrorConexion() {

@@ -8,6 +8,8 @@ import labsync.interfaz.reservas.VentanaGestionReservas;
 import labsync.interfaz.autenticacion.VentanaInicioSesion;
 import labsync.interfaz.panel.VentanaPanelAlumno;
 import labsync.interfaz.fallas.VentanaReporteFallaAlumno;
+import labsync.modelo.SesionUsuario;
+import labsync.persistencia.CatalogoLaboratorios;
 
 import java.awt.Color;
 import java.awt.Component;
@@ -31,20 +33,28 @@ import javax.swing.table.DefaultTableModel;
 public class VentanaReservasAlumno extends javax.swing.JFrame {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaReservasAlumno.class.getName());
-    private String nombreUsuario;
+    private final String nombreUsuario;
+    private final SesionUsuario sesion;
 
     public VentanaReservasAlumno() {
         this("Usuario");
     }
 
     public VentanaReservasAlumno(String nombreRecibido) {
+        this(SesionUsuario.buscarEstudiante(nombreRecibido));
+    }
+
+    public VentanaReservasAlumno(SesionUsuario sesion) {
+        this.sesion = sesion == null
+                ? new SesionUsuario(0, "Usuario", "Usuario", "Estudiante")
+                : sesion;
         initComponents();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
-        this.nombreUsuario = nombreRecibido == null || nombreRecibido.isBlank() ? "Usuario" : nombreRecibido;
+        this.nombreUsuario = this.sesion.getNombre();
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
         configurarDateChooser();
         configurarFormulario();
-        labsync.interfaz.comun.NotificacionesGlobales.alumno(this, headerBlanco, nombreUsuario);
+        labsync.interfaz.comun.NotificacionesGlobales.alumno(this, headerBlanco, this.sesion);
         setLocationRelativeTo(null);
     }
 
@@ -269,14 +279,12 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
     private boolean usuarioTieneReservaActiva(Connection con, DatosUsuario usuario) throws SQLException {
         String sql = "SELECT id_reserva "
             + "FROM reservas "
-            + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ? AND rol_solicitante = ?)) "
+            + "WHERE id_usuario=? "
             + "AND estado NOT IN ('Cancelada', 'Finalizada', 'Rechazada') "
             + "LIMIT 1";
 
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, usuario.idUsuario);
-            ps.setString(2, usuario.nombreCompleto);
-            ps.setString(3, usuario.rol);
 
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
@@ -362,20 +370,23 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
                 return;
             }
 
-            String sqlInsert = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, "
-                + "laboratorio, actividad, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) "
-                + "VALUES (?, ?, ?, ?, ?, 'N/A', 'N/A', ?, ?, ?, 1, 'Pendiente', NULL)";
+            int idLaboratorio = CatalogoLaboratorios.buscarIdDisponible(con, laboratorio);
+            String sqlInsert = "INSERT INTO reservas "
+                + "(id_usuario,id_laboratorio,actividad,grado,grupo,turno,fecha,"
+                + "hora_inicio,hora_fin,cantidad_alumnos,estado,observaciones) "
+                + "VALUES (?,?,?,'N/A','N/A',?,?,?,?,1,'Pendiente',NULL)";
 
             try (PreparedStatement ps = con.prepareStatement(sqlInsert)) {
                 ps.setInt(1, usuario.idUsuario);
-                ps.setString(2, usuario.nombreCompleto);
-                ps.setString(3, usuario.rol);
-                ps.setString(4, laboratorio);
-                ps.setString(5, actividad);
-                ps.setString(6, determinarTurno(horario));
-                ps.setDate(7, fecha);
-                ps.setString(8, horario);
-                ps.executeUpdate();
+                ps.setInt(2, idLaboratorio);
+                ps.setString(3, actividad);
+                ps.setString(4, determinarTurno(horario));
+                ps.setDate(5, fecha);
+                String[] partesHorario = horario.split("\\s*-\\s*");
+                java.time.format.DateTimeFormatter formatoHora = java.time.format.DateTimeFormatter.ofPattern("H:mm");
+                ps.setTime(6, java.sql.Time.valueOf(java.time.LocalTime.parse(partesHorario[0], formatoHora)));
+                ps.setTime(7, java.sql.Time.valueOf(java.time.LocalTime.parse(partesHorario[1], formatoHora)));
+                if (ps.executeUpdate() != 1) throw new SQLException("El laboratorio seleccionado no existe o no está disponible.");
             }
 
             con.commit();
@@ -410,9 +421,9 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
         String sql = "SELECT u.id, CONCAT_WS(' ', u.nombre, u.apellido_p, u.apellido_m) AS nombre_completo, "
             + "u.rol, COALESCE(e.turno, 'No especificado') AS turno FROM usuario u "
             + "LEFT JOIN estudiante e ON e.id_usuario = u.id "
-            + "WHERE u.nombre = ? LIMIT 1";
+            + "WHERE u.id = ? AND u.rol = 'Estudiante'";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, nombreUsuario);
+            ps.setInt(1, sesion.getId());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return new DatosUsuario(rs.getInt("id"), rs.getString("nombre_completo"), rs.getString("rol"), rs.getString("turno"));
@@ -454,7 +465,7 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
     }
 
     private void abrirReporteFallas() {
-        VentanaReporteFallaAlumno reportes = new VentanaReporteFallaAlumno(nombreUsuario);
+        VentanaReporteFallaAlumno reportes = new VentanaReporteFallaAlumno(sesion);
         reportes.setVisible(true);
         dispose();
     }
@@ -803,7 +814,7 @@ public class VentanaReservasAlumno extends javax.swing.JFrame {
     }
 
     private void btnMisReservasActionPerformed(java.awt.event.ActionEvent evt) {
-        VentanaPanelAlumno dashboard = new VentanaPanelAlumno(nombreUsuario);
+        VentanaPanelAlumno dashboard = new VentanaPanelAlumno(sesion);
         dashboard.setLocationRelativeTo(null);
         dashboard.setVisible(true);
         dispose();

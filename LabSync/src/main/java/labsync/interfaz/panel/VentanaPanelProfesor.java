@@ -61,14 +61,13 @@ public class VentanaPanelProfesor extends javax.swing.JFrame {
     }
 
     private ResumenProfesor consultarResumenProfesor() {
-        ConsultaTabla.Parametros usuario = ps -> { ps.setInt(1, sesion.getId()); ps.setString(2, sesion.getNombreCompleto()); };
-        String filtro = "(id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) AND rol_solicitante = 'Profesor'";
+        ConsultaTabla.Parametros usuario = ps -> ps.setInt(1, sesion.getId());
+        String filtro = "id_usuario=?";
         Object activas = ConsultaEscalar.ejecutar("SELECT COUNT(*) total FROM reservas WHERE " + filtro + " AND estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE()", "total", usuario);
         Object proxima = ConsultaEscalar.ejecutar("SELECT DATE_FORMAT(MIN(fecha),'%d/%m/%Y') proxima FROM reservas WHERE " + filtro + " AND estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE()", "proxima", usuario);
-        Object laboratorio = ConsultaEscalar.ejecutar("SELECT laboratorio FROM reservas WHERE " + filtro + " AND estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE() ORDER BY fecha, horario LIMIT 1", "laboratorio", usuario);
-        ConsultaTabla.Parametros reporte = ps -> { ps.setInt(1, sesion.getId()); ps.setString(2, sesion.getNombreCompleto()); };
-        Object reportes = ConsultaEscalar.ejecutar("SELECT COUNT(*) total FROM reporte_fallas WHERE (id_usuario = ? OR (id_usuario IS NULL AND reportado_por = ?)) AND rol_reportante = 'Profesor' AND estado IN ('Pendiente', 'En revisión')", "total", reporte);
-        javax.swing.table.DefaultTableModel tabla = ConsultaTabla.ejecutar("SELECT id_reserva, DATE_FORMAT(fecha, '%d/%m/%Y') fecha, horario, laboratorio, CONCAT(grado, grupo) grupo, actividad, estado FROM reservas WHERE " + filtro + " AND fecha >= CURDATE() AND estado IN ('Pendiente','Aprobada') ORDER BY fecha, horario LIMIT 5", new String[]{"ID","Fecha","Horario","Laboratorio","Grupo","Actividad","Estado"}, new String[]{"id_reserva","fecha","horario","laboratorio","grupo","actividad","estado"}, usuario);
+        Object laboratorio = ConsultaEscalar.ejecutar("SELECT l.nombre AS laboratorio FROM reservas r JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE " + filtro.replace("id_usuario", "r.id_usuario") + " AND r.estado IN ('Pendiente','Aprobada') AND r.fecha >= CURDATE() ORDER BY r.fecha,r.hora_inicio LIMIT 1", "laboratorio", usuario);
+        Object reportes = ConsultaEscalar.ejecutar("SELECT COUNT(*) total FROM reporte_fallas WHERE id_usuario=? AND estado IN ('Pendiente','En revisión')", "total", usuario);
+        javax.swing.table.DefaultTableModel tabla = ConsultaTabla.ejecutar("SELECT r.id_reserva,DATE_FORMAT(r.fecha,'%d/%m/%Y') fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre laboratorio,CONCAT(r.grado,r.grupo) grupo,r.actividad,r.estado FROM reservas r JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE r.id_usuario=? AND r.fecha>=CURDATE() AND r.estado IN ('Pendiente','Aprobada') ORDER BY r.fecha,r.hora_inicio LIMIT 5", new String[]{"ID","Fecha","Horario","Laboratorio","Grupo","Actividad","Estado"}, new String[]{"id_reserva","fecha","horario","laboratorio","grupo","actividad","estado"}, usuario);
         return new ResumenProfesor(String.valueOf(activas == null ? "-" : activas), proxima == null ? "Sin reservas" : proxima.toString(), laboratorio == null ? "No tienes reservas próximas" : laboratorio.toString(), String.valueOf(reportes == null ? "-" : reportes), tabla);
     }
 
@@ -139,15 +138,13 @@ public class VentanaPanelProfesor extends javax.swing.JFrame {
     }
 
     private void cargarResumen() {
-        String filtro = "(id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) "
-                + "AND rol_solicitante = 'Profesor'";
+        String filtro = "id_usuario=?";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) return;
             String sqlReservas = "SELECT SUM(CASE WHEN estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE() THEN 1 ELSE 0 END) activas, "
                     + "MIN(CASE WHEN estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE() THEN fecha END) proxima FROM reservas WHERE " + filtro;
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlReservas)) {
                 ps.setInt(1, sesion.getId());
-                ps.setString(2, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         lbValorReservas.setText(String.valueOf(rs.getInt("activas")));
@@ -156,21 +153,20 @@ public class VentanaPanelProfesor extends javax.swing.JFrame {
                     }
                 }
             }
-            String sqlDetalle = "SELECT laboratorio FROM reservas WHERE " + filtro
-                    + " AND estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE() ORDER BY fecha, horario LIMIT 1";
+            String sqlDetalle = "SELECT l.nombre AS laboratorio FROM reservas r JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE "
+                    + "r.id_usuario=? "
+                    + "AND r.estado IN ('Pendiente','Aprobada') AND r.fecha >= CURDATE() ORDER BY r.fecha,r.hora_inicio LIMIT 1";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlDetalle)) {
                 ps.setInt(1, sesion.getId());
-                ps.setString(2, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     lbDescProxima.setText(rs.next() ? rs.getString("laboratorio") : "No tienes reservas próximas");
                 }
             }
             String sqlReportes = "SELECT COUNT(*) total FROM reporte_fallas "
-                    + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND reportado_por = ?)) "
-                    + "AND rol_reportante = 'Profesor' AND estado IN ('Pendiente', 'En revisión')";
+                    + "WHERE id_usuario=? "
+                    + "AND estado IN ('Pendiente','En revisión')";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlReportes)) {
                 ps.setInt(1, sesion.getId());
-                ps.setString(2, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) lbValorReportes.setText(String.valueOf(rs.getInt("total")));
                 }
@@ -183,16 +179,14 @@ public class VentanaPanelProfesor extends javax.swing.JFrame {
     private void cargarReservasProximas() {
         javax.swing.table.DefaultTableModel modelo = (javax.swing.table.DefaultTableModel) tablaReservaciones.getModel();
         modelo.setRowCount(0);
-        String sql = "SELECT id_reserva, DATE_FORMAT(fecha, '%d/%m/%Y') fecha, horario, laboratorio, "
-                + "CONCAT(grado, grupo) grupo, actividad, estado FROM reservas "
-                + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) "
-                + "AND rol_solicitante = 'Profesor' "
-                + "AND fecha >= CURDATE() AND estado IN ('Pendiente','Aprobada') ORDER BY fecha, horario LIMIT 5";
+        String sql = "SELECT r.id_reserva,DATE_FORMAT(r.fecha,'%d/%m/%Y') fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre AS laboratorio, "
+                + "CONCAT(r.grado,r.grupo) grupo, r.actividad, r.estado FROM reservas r JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+                + "WHERE r.id_usuario=? "
+                + "AND r.fecha>=CURDATE() AND r.estado IN ('Pendiente','Aprobada') ORDER BY r.fecha,r.hora_inicio LIMIT 5";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) return;
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setInt(1, sesion.getId());
-                ps.setString(2, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) modelo.addRow(new Object[]{rs.getInt("id_reserva"), rs.getString("fecha"), rs.getString("horario"), rs.getString("laboratorio"), rs.getString("grupo"), rs.getString("actividad"), rs.getString("estado")});
                 }

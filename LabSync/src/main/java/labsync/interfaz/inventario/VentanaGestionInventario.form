@@ -764,13 +764,12 @@
               <Color blue="66" green="66" red="66" type="rgb"/>
             </Property>
             <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
-              <StringArray count="6">
+              <StringArray count="5">
                 <StringItem index="0" value="Todos"/>
                 <StringItem index="1" value="Disponible"/>
-                <StringItem index="2" value="En uso"/>
-                <StringItem index="3" value="Con falla"/>
-                <StringItem index="4" value="En mantenimiento"/>
-                <StringItem index="5" value="Dado de baja"/>
+                <StringItem index="2" value="Con falla"/>
+                <StringItem index="3" value="En mantenimiento"/>
+                <StringItem index="4" value="Baja"/>
               </StringArray>
             </Property>
             <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">

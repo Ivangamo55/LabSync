@@ -72,7 +72,7 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
 
     private void iniciarActualizacionAutomatica() {
         new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT id_reserva, DATE_FORMAT(fecha, '%Y-%m-%d') fecha, nombre_solicitante, laboratorio, actividad, grupo, turno, horario, estado, IFNULL(observaciones, '') observaciones FROM reservas WHERE estado NOT IN ('Finalizada', 'Cancelada') ORDER BY fecha DESC",
+                "SELECT r.id_reserva,DATE_FORMAT(r.fecha,'%Y-%m-%d') fecha,CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante,l.nombre AS laboratorio,r.actividad,r.grupo,r.turno,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.estado,IFNULL(r.observaciones,'') observaciones FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE r.estado<>'Cancelada' ORDER BY r.fecha DESC,r.hora_inicio",
                 new String[]{"ID", "Fecha", "Maestro", "Laboratorio", "Actividad", "Grupo", "Turno", "Horario", "Estado", "Observaciones"},
                 new String[]{"id_reserva", "fecha", "nombre_solicitante", "laboratorio", "actividad", "grupo", "turno", "horario", "estado", "observaciones"}),
                 modelo -> { tablaReservas.setModel(modelo); ocultarColumnaID(); });
@@ -115,13 +115,12 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
         modelo.addColumn("Estado");
         modelo.addColumn("Observaciones");
 
-        String sql = "SELECT id_reserva, "
-            + "DATE_FORMAT(fecha, '%Y-%m-%d') AS fecha, "
-            + "nombre_solicitante, laboratorio, actividad, grupo, turno, horario, estado, "
-            + "IFNULL(observaciones, '') AS observaciones "
-            + "FROM reservas "
-            + "WHERE estado NOT IN ('Finalizada', 'Cancelada') "
-            + "ORDER BY fecha DESC";
+        String sql = "SELECT r.id_reserva, "
+            + "DATE_FORMAT(r.fecha, '%Y-%m-%d') AS fecha, "
+            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante,l.nombre AS laboratorio,r.actividad,r.grupo,r.turno,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.estado, "
+            + "IFNULL(r.observaciones, '') AS observaciones "
+            + "FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+            + "WHERE r.estado <> 'Cancelada' ORDER BY r.fecha DESC";
 
         java.sql.Connection con = ConexionBaseDatos.conectar();
 
@@ -199,16 +198,16 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
         String turnoSeleccionado = cmbTurno.getSelectedItem().toString();
         String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
         
-        String sql = "SELECT id_reserva, "
-            + "DATE_FORMAT(fecha, '%Y-%m-%d') AS fecha, "
-            + "nombre_solicitante, laboratorio, actividad, grupo, turno, horario, estado, "
-            + "IFNULL(observaciones, '') AS observaciones "
-            + "FROM reservas WHERE 1=1 ";
+        String sql = "SELECT r.id_reserva, "
+            + "DATE_FORMAT(r.fecha, '%Y-%m-%d') AS fecha, "
+            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante,l.nombre AS laboratorio,r.actividad,r.grupo,r.turno,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.estado, "
+            + "IFNULL(r.observaciones, '') AS observaciones "
+            + "FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE 1=1 ";
         
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
         if (!textoBusqueda.isEmpty()) {
-            sql += "AND (nombre_solicitante LIKE ? OR actividad LIKE ? OR grupo LIKE ? OR laboratorio LIKE ?) ";
+            sql += "AND (CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) LIKE ? OR r.actividad LIKE ? OR r.grupo LIKE ? OR l.nombre LIKE ?) ";
             String busqueda = "%" + textoBusqueda + "%";
             parametros.add(busqueda);
             parametros.add(busqueda);
@@ -217,20 +216,20 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
         }
         
         if (!laboratorioSeleccionado.equals("Todos")) {
-            sql += "AND laboratorio = ? ";
+            sql += "AND l.nombre = ? ";
             parametros.add(laboratorioSeleccionado);
         }
 
         if (!turnoSeleccionado.equals("Todos")) {
-            sql += "AND turno = ? ";
+            sql += "AND r.turno = ? ";
             parametros.add(turnoSeleccionado);
         }
 
         if (!estadoSeleccionado.equals("Todos")) {
-            sql += "AND estado = ? ";
+            sql += "AND r.estado = ? ";
             parametros.add(estadoSeleccionado);
         } else {
-            sql += "AND estado NOT IN ('Finalizada', 'Cancelada') ";
+            sql += "AND r.estado NOT IN ('Finalizada', 'Cancelada') ";
         }
         
         sql += "ORDER BY fecha DESC";
@@ -339,14 +338,11 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
             return;
         }
         
-        String sql = "SELECT id_reserva, nombre_solicitante, rol_solicitante, laboratorio, "
-            + "actividad, grado, grupo, turno, "
-            + "DATE_FORMAT(fecha, '%Y-%m-%d') AS fecha, "
-            + "horario, cantidad_alumnos, estado, "
-            + "IFNULL(observaciones, '') AS observaciones, "
-            + "DATE_FORMAT(fecha_registro, '%Y-%m-%d %H:%i:%s') AS fecha_registro "
-            + "FROM reservas "
-            + "WHERE id_reserva = ?";
+        String sql = "SELECT r.id_reserva, CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante, u.rol rol_solicitante, l.nombre AS laboratorio, "
+            + "r.actividad, r.grado, r.grupo, r.turno, DATE_FORMAT(r.fecha, '%Y-%m-%d') AS fecha, "
+            + "CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.cantidad_alumnos,r.estado,IFNULL(r.observaciones,'') AS observaciones, "
+            + "DATE_FORMAT(r.fecha_registro, '%Y-%m-%d %H:%i:%s') AS fecha_registro "
+            + "FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE r.id_reserva = ?";
         
         try {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
@@ -501,34 +497,20 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
         String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
 
         String sql = "SELECT "
-            + "id_reserva, "
-            + "DATE_FORMAT(fecha, '%d/%m/%Y') AS fecha, "
-            + "nombre_solicitante, "
-            + "rol_solicitante, "
-            + "laboratorio, "
-            + "actividad, "
-            + "grado, "
-            + "grupo, "
-            + "turno, "
-            + "horario, "
-            + "cantidad_alumnos, "
-            + "estado, "
-            + "IFNULL(observaciones, '') AS observaciones, "
-            + "DATE_FORMAT(fecha_registro, '%d/%m/%Y %H:%i:%s') AS fecha_registro "
-            + "FROM reservas "
+            + "r.id_reserva, DATE_FORMAT(r.fecha, '%d/%m/%Y') AS fecha, "
+            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante, u.rol rol_solicitante, l.nombre AS laboratorio, "
+            + "r.actividad,r.grado,r.grupo,r.turno,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.cantidad_alumnos,r.estado, "
+            + "IFNULL(r.observaciones, '') AS observaciones, "
+            + "DATE_FORMAT(r.fecha_registro, '%d/%m/%Y %H:%i:%s') AS fecha_registro "
+            + "FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
             + "WHERE 1=1 ";
 
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
 
         if (!textoBusqueda.isEmpty()) {
-            sql += "AND (nombre_solicitante LIKE ? "
-                + "OR rol_solicitante LIKE ? "
-                + "OR laboratorio LIKE ? "
-                + "OR actividad LIKE ? "
-                + "OR grupo LIKE ? "
-                + "OR estado LIKE ? "
-                + "OR DATE_FORMAT(fecha, '%d/%m/%Y') LIKE ? "
-                + "OR DATE_FORMAT(fecha, '%Y-%m-%d') LIKE ?) ";
+            sql += "AND (CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) LIKE ? OR u.rol LIKE ? "
+                + "OR l.nombre LIKE ? OR r.actividad LIKE ? OR r.grupo LIKE ? OR r.estado LIKE ? "
+                + "OR DATE_FORMAT(r.fecha, '%d/%m/%Y') LIKE ? OR DATE_FORMAT(r.fecha, '%Y-%m-%d') LIKE ?) ";
 
             String busqueda = "%" + textoBusqueda + "%";
 
@@ -543,23 +525,23 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
         }
 
         if (!laboratorioSeleccionado.equals("Todos")) {
-            sql += "AND laboratorio = ? ";
+            sql += "AND l.nombre = ? ";
             parametros.add(laboratorioSeleccionado);
         }
 
         if (!turnoSeleccionado.equals("Todos")) {
-            sql += "AND turno = ? ";
+            sql += "AND r.turno = ? ";
             parametros.add(turnoSeleccionado);
         }
 
         if (!estadoSeleccionado.equals("Todos")) {
-            sql += "AND estado = ? ";
+            sql += "AND r.estado = ? ";
             parametros.add(estadoSeleccionado);
         } else {
-            sql += "AND estado NOT IN ('Finalizada', 'Cancelada') ";
+            sql += "AND r.estado NOT IN ('Finalizada', 'Cancelada') ";
         }
 
-        sql += "ORDER BY fecha DESC";
+        sql += "ORDER BY r.fecha DESC";
 
         java.sql.Connection con = ConexionBaseDatos.conectar();
 
@@ -947,7 +929,7 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
 
         lbDetalleCantidad.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbDetalleCantidad.setForeground(new java.awt.Color(102, 102, 102));
-        lbDetalleCantidad.setText("Personas (máximo 31)");
+        lbDetalleCantidad.setText("Personas");
         bodyModal.add(lbDetalleCantidad, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 370, -1, -1));
 
         txtDetalleCantidad.setEditable(false);

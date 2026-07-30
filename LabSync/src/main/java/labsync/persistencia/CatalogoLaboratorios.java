@@ -26,6 +26,25 @@ public final class CatalogoLaboratorios {
         cargar(combo, primeraOpcion, false);
     }
 
+    /**
+     * Resuelve y bloquea un laboratorio disponible antes de insertar una reserva.
+     * La inserción posterior debe usar VALUES para que el trigger pueda consultar
+     * laboratorios sin que esa tabla forme parte de la sentencia que lo invoca.
+     */
+    public static int buscarIdDisponible(Connection conexion, String nombre) throws SQLException {
+        String sql = "SELECT id_laboratorio FROM laboratorios "
+                + "WHERE nombre=? AND estado='Disponible' FOR UPDATE";
+        try (PreparedStatement ps = conexion.prepareStatement(sql)) {
+            ps.setString(1, nombre);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("id_laboratorio");
+                }
+            }
+        }
+        throw new SQLException("El laboratorio seleccionado no existe o no está disponible.");
+    }
+
     private static void cargar(JComboBox<String> combo, String primeraOpcion, boolean soloDisponibles) {
         combo.removeAllItems();
         combo.addItem(primeraOpcion);

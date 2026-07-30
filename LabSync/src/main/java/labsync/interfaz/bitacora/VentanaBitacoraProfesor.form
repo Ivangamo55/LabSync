@@ -852,7 +852,7 @@
                 <Property name="foreground" type="java.awt.Color" editor="org.netbeans.beaninfo.editors.ColorEditor">
                   <Color blue="5a" green="5a" red="5a" type="rgb"/>
                 </Property>
-                <Property name="text" type="java.lang.String" value="Personas (máximo 31)"/>
+                <Property name="text" type="java.lang.String" value="Personas"/>
               </Properties>
               <Constraints>
                 <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout" value="org.netbeans.modules.form.compat2.layouts.DesignAbsoluteLayout$AbsoluteConstraintsDescription">

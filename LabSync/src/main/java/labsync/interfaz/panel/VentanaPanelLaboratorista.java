@@ -124,7 +124,7 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
         String fallas = consultarConteo("SELECT COUNT(*) FROM inventario WHERE estado = 'Con falla'");
         String mantenimientos = consultarConteo("SELECT COUNT(*) FROM mantenimiento WHERE estado IN ('Pendiente', 'En proceso')");
         DefaultTableModel tablaMant = ConsultaTabla.ejecutar(
-                "SELECT DATE_FORMAT(fecha_programada, '%d/%m/%Y') fecha_programada, codigo_equipo, nombre_equipo, laboratorio, tipo_mantenimiento, estado, responsable FROM mantenimiento ORDER BY fecha_programada DESC, id_mantenimiento DESC LIMIT 5",
+                "SELECT DATE_FORMAT(m.fecha_programada, '%d/%m/%Y') fecha_programada, i.codigo codigo_equipo, i.nombre_equipo, l.nombre laboratorio, m.tipo_mantenimiento, m.estado, m.responsable FROM mantenimiento m JOIN inventario i ON i.id_inventario=m.id_inventario JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio ORDER BY m.fecha_programada DESC, m.id_mantenimiento DESC LIMIT 5",
                 new String[]{"Fecha", "Código Equipo", "Nombre Equipo", "Laboratorio", "Tipo", "Estado", "Responsable"},
                 new String[]{"fecha_programada", "codigo_equipo", "nombre_equipo", "laboratorio", "tipo_mantenimiento", "estado", "responsable"});
         DefaultTableModel tablaBits = ConsultaTabla.ejecutar(
@@ -220,7 +220,7 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
                     java.awt.SystemTray.getSystemTray().add(iconoNotificaciones);
                 }
                 iconoNotificaciones.displayMessage(principal.titulo(), mensaje,
-                        "Critica".equals(principal.prioridad())
+                        "Crítica".equals(principal.prioridad())
                                 ? java.awt.TrayIcon.MessageType.WARNING
                                 : java.awt.TrayIcon.MessageType.INFO);
                 return;
@@ -358,15 +358,13 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
         modelo.addColumn("Responsable");
         
         String sql = "SELECT "
-            + "DATE_FORMAT(fecha_programada, '%d/%m/%Y') AS fecha_programada, "
-            + "codigo_equipo, "
-            + "nombre_equipo, "
-            + "laboratorio, "
-            + "tipo_mantenimiento, "
-            + "estado, "
-            + "responsable "
-            + "FROM mantenimiento "
-            + "ORDER BY fecha_programada DESC, id_mantenimiento DESC "
+            + "DATE_FORMAT(m.fecha_programada, '%d/%m/%Y') AS fecha_programada, "
+            + "i.codigo AS codigo_equipo, i.nombre_equipo, l.nombre AS laboratorio, "
+            + "m.tipo_mantenimiento, m.estado, m.responsable "
+            + "FROM mantenimiento m "
+            + "JOIN inventario i ON i.id_inventario=m.id_inventario "
+            + "JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
+            + "ORDER BY m.fecha_programada DESC, m.id_mantenimiento DESC "
             + "LIMIT 5";
         
         if (con == null) {

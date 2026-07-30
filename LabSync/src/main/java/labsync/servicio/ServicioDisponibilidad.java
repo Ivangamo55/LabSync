@@ -13,7 +13,6 @@ import java.time.format.DateTimeParseException;
 /** Centraliza las reglas de disponibilidad compartidas por reservas y mantenimiento. */
 public final class ServicioDisponibilidad {
 
-    public static final int MAXIMO_PERSONAS_POR_LABORATORIO = 31;
     private static final String[] ESTADOS_RESERVA_ACTIVA = {"Pendiente", "Aprobada"};
     private static final DateTimeFormatter FORMATO_HORA = DateTimeFormatter.ofPattern("H:mm");
 
@@ -31,8 +30,10 @@ public final class ServicioDisponibilidad {
 
     public ResultadoDisponibilidad validarAprobacion(
             Connection conexion, int idReserva, boolean bloquear) throws SQLException {
-        String sql = "SELECT laboratorio, fecha, horario, rol_solicitante, cantidad_alumnos FROM reservas "
-                + "WHERE id_reserva = ?" + clausulaBloqueo(bloquear);
+        String sql = "SELECT l.nombre AS laboratorio, l.total_equipos, l.capacidad_personas, r.fecha, "
+                + "r.hora_inicio, r.hora_fin, u.rol AS rol_solicitante, r.cantidad_alumnos "
+                + "FROM reservas r JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio JOIN usuario u ON u.id=r.id_usuario "
+                + "WHERE r.id_reserva = ?" + clausulaBloqueo(bloquear);
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setInt(1, idReserva);
             try (ResultSet rs = ps.executeQuery()) {
@@ -40,16 +41,19 @@ public final class ServicioDisponibilidad {
                     return ResultadoDisponibilidad.noDisponible(
                             "No se encontró la reserva seleccionada.", 0);
                 }
-                if (rs.getInt("cantidad_alumnos") > MAXIMO_PERSONAS_POR_LABORATORIO) {
+                boolean profesor = "Profesor".equalsIgnoreCase(rs.getString("rol_solicitante"));
+                int capacidad = rs.getInt(profesor ? "capacidad_personas" : "total_equipos");
+                if (rs.getInt("cantidad_alumnos") > capacidad) {
                     return ResultadoDisponibilidad.noDisponible(
-                            "La reserva supera el límite de 31 personas por laboratorio.", 0);
+                            "La reserva supera la capacidad actual del laboratorio.",
+                            capacidad);
                 }
                 return consultar(
                         conexion,
                         rs.getString("laboratorio"),
                         rs.getDate("fecha").toLocalDate(),
-                        rs.getString("horario"),
-                        "Profesor".equalsIgnoreCase(rs.getString("rol_solicitante")),
+                        formatearIntervalo(rs.getTime("hora_inicio"), rs.getTime("hora_fin")),
+                        profesor,
                         bloquear,
                         idReserva);
             }
@@ -59,9 +63,10 @@ public final class ServicioDisponibilidad {
     public boolean existenReservasEnFecha(
             Connection conexion, String laboratorio, LocalDate fecha, boolean bloquear)
             throws SQLException {
-        String sql = "SELECT id_reserva FROM reservas "
-                + "WHERE laboratorio = ? AND fecha = ? "
-                + "AND estado IN (?, ?) LIMIT 1" + clausulaBloqueo(bloquear);
+        String sql = "SELECT r.id_reserva FROM reservas r "
+                + "JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+                + "WHERE l.nombre = ? AND r.fecha = ? "
+                + "AND r.estado IN (?, ?) LIMIT 1" + clausulaBloqueo(bloquear);
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setString(1, laboratorio);
             ps.setDate(2, Date.valueOf(fecha));
@@ -87,7 +92,7 @@ public final class ServicioDisponibilidad {
     private ResultadoDisponibilidad consultar(
             Connection conexion, String laboratorio, LocalDate fecha, String horario,
             boolean reservaProfesor, boolean bloquear, Integer idReservaExcluida) throws SQLException {
-        int capacidad = consultarCapacidad(conexion, laboratorio, bloquear);
+        int capacidad = consultarCapacidad(conexion, laboratorio, reservaProfesor, bloquear);
         if (capacidad <= 0) {
             return ResultadoDisponibilidad.noDisponible("El laboratorio no está disponible.", 0);
         }
@@ -108,29 +113,32 @@ public final class ServicioDisponibilidad {
                 conexion, laboratorio, fecha, horario, bloquear, idReservaExcluida);
         if (ocupacion.hayReservaProfesor) {
             return ResultadoDisponibilidad.noDisponible(
-                    "El laboratorio ya tiene una reserva de profesor en ese horario.", 0);
+                    "El laboratorio ya está reservado por un profesor en ese horario.", capacidad);
         }
-        if (reservaProfesor && ocupacion.reservasAlumno > 0) {
+        if (reservaProfesor && ocupacion.usuariosAlumno > 0) {
             return ResultadoDisponibilidad.noDisponible(
-                    "Existen reservas activas de alumnos en ese horario.", 0);
+                    "El laboratorio ya tiene reservas individuales activas en ese horario.", capacidad);
         }
 
-        int equiposDisponibles = Math.max(0, capacidad - ocupacion.reservasAlumno);
+        int equiposDisponibles = reservaProfesor
+                ? capacidad
+                : Math.max(0, capacidad - ocupacion.usuariosAlumno);
         if (!reservaProfesor && equiposDisponibles == 0) {
             return ResultadoDisponibilidad.noDisponible(
-                    "No hay computadoras disponibles en ese horario.", 0);
+                    "No hay computadoras disponibles en ese horario.", capacidad);
         }
         return ResultadoDisponibilidad.disponible(equiposDisponibles, capacidad);
     }
 
-    private int consultarCapacidad(Connection conexion, String laboratorio, boolean bloquear)
+    private int consultarCapacidad(Connection conexion, String laboratorio,
+            boolean reservaProfesor, boolean bloquear)
             throws SQLException {
-        String sql = "SELECT total_equipos FROM laboratorios "
+        String sql = "SELECT total_equipos,capacidad_personas FROM laboratorios "
                 + "WHERE nombre = ? AND estado = 'Disponible'" + clausulaBloqueo(bloquear);
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setString(1, laboratorio);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? rs.getInt("total_equipos") : 0;
+                return rs.next() ? rs.getInt(reservaProfesor ? "capacidad_personas" : "total_equipos") : 0;
             }
         }
     }
@@ -138,8 +146,10 @@ public final class ServicioDisponibilidad {
     private boolean tieneMantenimientoActivo(
             Connection conexion, String laboratorio, LocalDate fecha, boolean bloquear)
             throws SQLException {
-        String sql = "SELECT id_mantenimiento FROM mantenimiento "
-                + "WHERE laboratorio = ? AND estado IN ('Pendiente', 'En proceso') "
+        String sql = "SELECT m.id_mantenimiento FROM mantenimiento m "
+                + "JOIN inventario i ON i.id_inventario=m.id_inventario "
+                + "JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
+                + "WHERE l.nombre = ? AND m.estado IN ('Pendiente', 'En proceso') "
                 + "AND fecha_programada <= ? "
                 + "LIMIT 1" + clausulaBloqueo(bloquear);
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
@@ -153,8 +163,9 @@ public final class ServicioDisponibilidad {
 
     private boolean tieneReporteEnRevision(
             Connection conexion, String laboratorio, boolean bloquear) throws SQLException {
-        String sql = "SELECT id_falla FROM reporte_fallas "
-                + "WHERE laboratorio = ? AND estado = 'En revisión' "
+        String sql = "SELECT f.id_falla FROM reporte_fallas f "
+                + "JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio "
+                + "WHERE l.nombre = ? AND f.estado = 'En revisión' "
                 + "LIMIT 1" + clausulaBloqueo(bloquear);
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setString(1, laboratorio);
@@ -187,9 +198,13 @@ public final class ServicioDisponibilidad {
             Connection conexion, String laboratorio, LocalDate fecha, String horario, boolean bloquear,
             Integer idReservaExcluida)
             throws SQLException {
-        String sql = "SELECT rol_solicitante, horario FROM reservas "
-                + "WHERE laboratorio = ? AND fecha = ? AND estado IN (?, ?) "
-                + (idReservaExcluida == null ? "" : "AND id_reserva <> ? ")
+        LocalTime[] intervalo = obtenerIntervalo(horario);
+        String sql = "SELECT u.rol AS rol_solicitante, r.cantidad_alumnos FROM reservas r "
+                + "JOIN usuario u ON u.id=r.id_usuario "
+                + "JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+                + "WHERE l.nombre = ? AND r.fecha = ? AND r.estado IN (?, ?) "
+                + "AND ? < r.hora_fin AND ? > r.hora_inicio "
+                + (idReservaExcluida == null ? "" : "AND r.id_reserva <> ? ")
                 + clausulaBloqueo(bloquear);
         Ocupacion ocupacion = new Ocupacion();
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
@@ -197,18 +212,17 @@ public final class ServicioDisponibilidad {
             ps.setDate(2, Date.valueOf(fecha));
             ps.setString(3, ESTADOS_RESERVA_ACTIVA[0]);
             ps.setString(4, ESTADOS_RESERVA_ACTIVA[1]);
+            ps.setTime(5, java.sql.Time.valueOf(intervalo[0]));
+            ps.setTime(6, java.sql.Time.valueOf(intervalo[1]));
             if (idReservaExcluida != null) {
-                ps.setInt(5, idReservaExcluida);
+                ps.setInt(7, idReservaExcluida);
             }
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    if (!horariosSeTraslapan(horario, rs.getString("horario"))) {
-                        continue;
-                    }
                     if ("Profesor".equalsIgnoreCase(rs.getString("rol_solicitante"))) {
                         ocupacion.hayReservaProfesor = true;
                     } else {
-                        ocupacion.reservasAlumno++;
+                        ocupacion.usuariosAlumno += rs.getInt("cantidad_alumnos");
                     }
                 }
             }
@@ -245,13 +259,18 @@ public final class ServicioDisponibilidad {
         }
     }
 
+    private String formatearIntervalo(java.sql.Time inicio, java.sql.Time fin) {
+        return inicio.toLocalTime().format(FORMATO_HORA) + " - "
+                + fin.toLocalTime().format(FORMATO_HORA);
+    }
+
     private String clausulaBloqueo(boolean bloquear) {
         return bloquear ? " FOR UPDATE" : "";
     }
 
     private static final class Ocupacion {
         private boolean hayReservaProfesor;
-        private int reservasAlumno;
+        private int usuariosAlumno;
     }
 
     public static final class ResultadoDisponibilidad {

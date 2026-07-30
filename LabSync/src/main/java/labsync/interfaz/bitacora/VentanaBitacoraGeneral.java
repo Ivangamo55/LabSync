@@ -834,7 +834,7 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
 
         lbDetalleTotalUsuarios.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         lbDetalleTotalUsuarios.setForeground(new java.awt.Color(102, 102, 102));
-        lbDetalleTotalUsuarios.setText("Personas (máximo 31)");
+        lbDetalleTotalUsuarios.setText("Personas");
         body.add(lbDetalleTotalUsuarios, new org.netbeans.lib.awtextra.AbsoluteConstraints(470, 285, -1, -1));
 
         txtDetalleTotalUsuarios.setEditable(false);

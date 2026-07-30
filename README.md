@@ -31,16 +31,57 @@ En Linux/macOS o en un contenedor:
 
 El JAR ejecutable queda en `LabSync/target/LabSync-1.0.jar`.
 
+## Pruebas y cobertura
+
+`clean verify` ejecuta las pruebas unitarias con JUnit 5 y genera el reporte de
+cobertura de JaCoCo en
+`LabSync/target/site/jacoco/index.html`. El reporte actual contiene 41 pruebas:
+ninguna falla, ningún error y ninguna prueba omitida.
+
+La cobertura actual está concentrada en la lógica que administra
+disponibilidad, horarios, mantenimiento y alertas:
+
+| Paquete | Instrucciones | Ramas |
+| --- | ---: | ---: |
+| `labsync.servicio` | 65 % | 45 % |
+| `labsync.persistencia` | 31 % | 21 % |
+| Proyecto completo | 2 % | 6 % |
+
+El porcentaje global es bajo porque la mayoría de las ventanas Swing aún no
+tiene pruebas automatizadas. Por ello, el reporte no debe interpretarse como
+una validación completa de la interfaz ni de todos los flujos de la aplicación.
+
 ## Base de datos
 
 1. Iniciar MySQL o MariaDB en `localhost:3306`.
 2. Importar `LabSync/src/main/resources/DB/labsync_db.sql`.
-3. Aplicar en orden los scripts de `LabSync/src/main/resources/DB/migrations`.
-   Los horarios UTJ-CCD se incorporan mediante
-   `20260722_agregar_horarios_escolares_ccd.sql`.
-4. La configuración actual usa la base `labsync_db`, usuario `root` y
-   contraseña vacía; se encuentra en
-   `LabSync/src/main/java/labsync/configuracion/ConexionBaseDatos.java`.
+   Este archivo es la única fuente de verdad y crea el esquema completo para
+   una instalación nueva.
+3. La conexión se centraliza en `ConexionBaseDatos` y admite las variables
+   `LABSYNC_DB_URL`, `LABSYNC_DB_USER` y `LABSYNC_DB_PASSWORD`. Los valores
+   locales predeterminados conservan la instalación de desarrollo existente.
+
+El script completo recrea tablas y carga datos iniciales. No debe reimportarse
+sobre una base existente cuando se necesite conservar sus datos; antes de
+cualquier cambio manual se recomienda crear un respaldo.
+
+La autenticación actual conserva hashes SHA-256 hexadecimales por
+compatibilidad. Antes de producción debe migrarse a Argon2id o bcrypt con sal
+individual y actualización gradual de hashes.
+
+## Reglas principales de reservación
+
+- Las reservas se asocian al identificador del usuario autenticado, no al
+  nombre mostrado en la interfaz.
+- Una reserva de profesor ocupa el laboratorio de forma exclusiva durante su
+  horario.
+- Los alumnos pueden compartir un laboratorio mientras existan equipos
+  disponibles; cada reserva consume un equipo y nunca debe superar
+  `total_equipos`.
+- Una clase programada, una reserva exclusiva o el mantenimiento del
+  laboratorio bloquean nuevas reservas incompatibles.
+- La disponibilidad se vuelve a validar dentro de la transacción y también se
+  protege mediante restricciones y disparadores de la base de datos.
 
 ## Ejecutar la interfaz
 

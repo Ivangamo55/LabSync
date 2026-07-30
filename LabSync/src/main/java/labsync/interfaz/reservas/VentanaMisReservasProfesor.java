@@ -52,10 +52,10 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
 
     private void iniciarActualizacionAutomatica() {
         new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT id_reserva, DATE_FORMAT(fecha, '%d/%m/%Y') fecha, horario, laboratorio, SUBSTRING_INDEX(carrera, ' - ', 1) carrera, CONCAT(grado, grupo) grupo, actividad, estado FROM reservas WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) AND rol_solicitante = 'Profesor' ORDER BY fecha DESC, horario",
+                "SELECT r.id_reserva,DATE_FORMAT(r.fecha,'%d/%m/%Y') fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre laboratorio,SUBSTRING_INDEX(r.carrera,' - ',1) carrera,CONCAT(r.grado,r.grupo) grupo,r.actividad,r.estado FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE r.id_usuario=? AND u.rol='Profesor' ORDER BY r.fecha DESC,r.hora_inicio",
                 new String[]{"ID", "Fecha", "Horario", "Laboratorio", "Carrera", "Grupo", "Actividad", "Estado"},
                 new String[]{"id_reserva", "fecha", "horario", "laboratorio", "carrera", "grupo", "actividad", "estado"},
-                ps -> { ps.setInt(1, sesion.getId()); ps.setString(2, sesion.getNombreCompleto()); }),
+                ps -> ps.setInt(1, sesion.getId())),
                 modelo -> { tablaReservas.setModel(modelo); aplicarFiltro(); });
     }
 
@@ -156,15 +156,14 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
     private void cargarReservas() {
         javax.swing.table.DefaultTableModel modelo = (javax.swing.table.DefaultTableModel) tablaReservas.getModel();
         modelo.setRowCount(0);
-        String sql = "SELECT id_reserva, DATE_FORMAT(fecha, '%d/%m/%Y') fecha, horario, laboratorio, "
-                + "SUBSTRING_INDEX(carrera, ' - ', 1) carrera, CONCAT(grado, grupo) grupo, actividad, estado FROM reservas "
-                + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) "
-                + "AND rol_solicitante = 'Profesor' ORDER BY fecha DESC, horario";
+        String sql = "SELECT r.id_reserva,DATE_FORMAT(r.fecha,'%d/%m/%Y') fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre AS laboratorio, "
+                + "SUBSTRING_INDEX(r.carrera, ' - ', 1) carrera, CONCAT(r.grado, r.grupo) grupo, r.actividad, r.estado FROM reservas r "
+                + "JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+                + "WHERE r.id_usuario=? AND u.rol='Profesor' ORDER BY r.fecha DESC,r.hora_inicio";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) return;
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setInt(1, sesion.getId());
-                ps.setString(2, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) modelo.addRow(new Object[]{rs.getInt("id_reserva"), rs.getString("fecha"), rs.getString("horario"), rs.getString("laboratorio"), rs.getString("carrera"), rs.getString("grupo"), rs.getString("actividad"), rs.getString("estado")});
                 }
@@ -194,14 +193,13 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
 
     private void verDetalle() {
         int id = idSeleccionado(); if (id < 0) return;
-        String sql = "SELECT nombre_solicitante, rol_solicitante, laboratorio, actividad, carrera, grado, grupo, turno, DATE_FORMAT(fecha,'%d/%m/%Y') fecha, horario, cantidad_alumnos, estado, IFNULL(observaciones,'Sin observaciones') observaciones FROM reservas "
-                + "WHERE id_reserva = ? AND (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?))";
+        String sql = "SELECT CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante,u.rol rol_solicitante,l.nombre AS laboratorio,r.actividad,r.carrera,r.grado,r.grupo,r.turno,DATE_FORMAT(r.fecha,'%d/%m/%Y') fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.cantidad_alumnos,r.estado,IFNULL(r.observaciones,'Sin observaciones') observaciones FROM reservas r "
+                + "JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE r.id_reserva=? AND r.id_usuario=?";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setInt(1, id);
                 ps.setInt(2, sesion.getId());
-                ps.setString(3, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         String detalle = "Solicitante: " + rs.getString("nombre_solicitante") + "\nRol: " + rs.getString("rol_solicitante") + "\nFecha: " + rs.getString("fecha") + "\nHorario: " + rs.getString("horario") + "\nLaboratorio: " + rs.getString("laboratorio") + "\nCarrera: " + rs.getString("carrera") + "\nActividad: " + rs.getString("actividad") + "\nGrado y grupo: " + rs.getString("grado") + rs.getString("grupo") + "\nTurno: " + rs.getString("turno") + "\nPersonas: " + rs.getInt("cantidad_alumnos") + " de 31\nEstado: " + rs.getString("estado") + "\nObservaciones: " + rs.getString("observaciones");
@@ -221,12 +219,11 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             String sql = "UPDATE reservas SET estado = 'Cancelada' WHERE id_reserva = ? "
-                    + "AND (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) "
+                    + "AND id_usuario=? "
                     + "AND estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE()";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setInt(1, id);
                 ps.setInt(2, sesion.getId());
-                ps.setString(3, sesion.getNombreCompleto());
                 if (ps.executeUpdate() == 0) {
                     javax.swing.JOptionPane.showMessageDialog(this, "La reserva ya no puede cancelarse.", "Sin cambios", javax.swing.JOptionPane.WARNING_MESSAGE);
                 }

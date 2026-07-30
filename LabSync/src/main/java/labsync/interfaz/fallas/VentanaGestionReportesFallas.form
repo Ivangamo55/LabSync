@@ -1028,7 +1028,7 @@
                 <StringItem index="1" value="Baja"/>
                 <StringItem index="2" value="Media"/>
                 <StringItem index="3" value="Alta"/>
-                <StringItem index="4" value="Urgente"/>
+                <StringItem index="4" value="Crítica"/>
               </StringArray>
             </Property>
             <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">

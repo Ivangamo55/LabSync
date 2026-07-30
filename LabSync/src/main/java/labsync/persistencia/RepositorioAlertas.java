@@ -13,23 +13,12 @@ import java.util.List;
 /** Acceso a datos de alertas. Todas las consultas usan parámetros. */
 public final class RepositorioAlertas {
 
-    /** Permite actualizar instalaciones existentes sin exigir reimportar toda la base. */
+    /** Verifica que la fuente de verdad haya sido instalada antes de usar alertas. */
     public void crearTablaSiNoExiste(Connection conexion) throws SQLException {
-        String sql = "CREATE TABLE IF NOT EXISTS alertas ("
-                + "id_alerta INT NOT NULL AUTO_INCREMENT, "
-                + "tipo VARCHAR(40) NOT NULL, referencia VARCHAR(50) NOT NULL, "
-                + "titulo VARCHAR(120) NOT NULL, detalle VARCHAR(500) NOT NULL, "
-                + "prioridad VARCHAR(20) NOT NULL DEFAULT 'Media', "
-                + "estado VARCHAR(20) NOT NULL DEFAULT 'Nueva', "
-                + "fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
-                + "fecha_lectura TIMESTAMP NULL DEFAULT NULL, "
-                + "fecha_atencion TIMESTAMP NULL DEFAULT NULL, "
-                + "PRIMARY KEY (id_alerta), "
-                + "UNIQUE KEY uk_alerta_origen (tipo, referencia), "
-                + "KEY idx_alerta_estado_prioridad (estado, prioridad)"
-                + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        try (PreparedStatement ps = conexion.prepareStatement(sql)) {
-            ps.executeUpdate();
+        String sql = "SELECT 1 FROM alertas LIMIT 0";
+        try (PreparedStatement ps = conexion.prepareStatement(sql);
+                ResultSet ignored = ps.executeQuery()) {
+            // Preparar y ejecutar la consulta basta para verificar que la tabla existe.
         }
     }
 
@@ -37,8 +26,9 @@ public final class RepositorioAlertas {
         String sql = "SELECT id_alerta, tipo, referencia, titulo, detalle, prioridad, estado, fecha_creacion "
                 + "FROM alertas "
                 + "WHERE tipo NOT IN ('RESERVA_APROBADA','RESERVA_RECHAZADA') "
-                + "ORDER BY FIELD(estado, 'Nueva', 'Leida', 'Atendida'), "
-                + "FIELD(prioridad, 'Critica', 'Alta', 'Media', 'Baja'), fecha_creacion DESC";
+                + (incluirAtendidas ? "" : "AND estado <> 'Atendida' ")
+                + "ORDER BY FIELD(estado, 'Nueva', 'Leída', 'Atendida'), "
+                + "FIELD(prioridad, 'Crítica', 'Alta', 'Media', 'Baja'), fecha_creacion DESC";
         List<Alerta> alertas = new ArrayList<>();
         try (PreparedStatement ps = conexion.prepareStatement(sql);
                 ResultSet rs = ps.executeQuery()) {
@@ -56,7 +46,7 @@ public final class RepositorioAlertas {
 
     public int contarNoLeidas(Connection conexion) throws SQLException {
         try (PreparedStatement ps = conexion.prepareStatement(
-                "SELECT COUNT(*) FROM alertas")) {
+                "SELECT COUNT(*) FROM alertas WHERE estado = 'Nueva'")) {
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getInt(1) : 0;
             }
@@ -67,16 +57,15 @@ public final class RepositorioAlertas {
             String nombreCompleto, String rol) throws SQLException {
         String sql = "SELECT a.id_alerta, a.tipo, a.referencia, a.titulo, a.detalle, "
                 + "a.prioridad, a.estado, a.fecha_creacion FROM alertas a "
-                + "JOIN reservas r ON r.id_reserva=CAST(a.referencia AS UNSIGNED) "
+                + "JOIN reservas r ON r.id_reserva=a.id_reserva "
+                + "JOIN usuario u ON u.id=r.id_usuario "
                 + "WHERE a.tipo IN ('RESERVA_APROBADA','RESERVA_RECHAZADA') "
-                + "AND a.estado<>'Atendida' AND r.rol_solicitante=? "
-                + "AND (r.id_usuario=? OR (r.id_usuario IS NULL AND r.nombre_solicitante=?)) "
-                + "ORDER BY FIELD(a.estado,'Nueva','Leida'), a.fecha_creacion DESC";
+                + "AND a.estado<>'Atendida' AND u.rol=? AND r.id_usuario=? "
+                + "ORDER BY FIELD(a.estado,'Nueva','Leída'), a.fecha_creacion DESC";
         List<Alerta> alertas = new ArrayList<>();
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setString(1, rol);
             ps.setInt(2, idUsuario);
-            ps.setString(3, nombreCompleto);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     Timestamp fecha = rs.getTimestamp("fecha_creacion");
@@ -91,7 +80,7 @@ public final class RepositorioAlertas {
     }
 
     public void cambiarEstado(Connection conexion, int idAlerta, String estado) throws SQLException {
-        String sql = "UPDATE alertas SET estado = ?, fecha_lectura = CASE WHEN ? = 'Leida' "
+        String sql = "UPDATE alertas SET estado = ?, fecha_lectura = CASE WHEN ? = 'Leída' "
                 + "THEN COALESCE(fecha_lectura, CURRENT_TIMESTAMP) ELSE fecha_lectura END, "
                 + "fecha_atencion = CASE WHEN ? = 'Atendida' THEN CURRENT_TIMESTAMP "
                 + "ELSE fecha_atencion END WHERE id_alerta = ?";
@@ -119,6 +108,23 @@ public final class RepositorioAlertas {
             ps.setString(5, prioridad);
             ps.executeUpdate();
         }
+        String vincularOrigen = "UPDATE alertas a LEFT JOIN inventario i ON i.codigo=a.referencia "
+                + "SET a.id_reserva=CASE WHEN a.tipo IN "
+                + "('RESERVA_PENDIENTE','RESERVA_APROBADA','RESERVA_RECHAZADA') "
+                + "THEN CAST(a.referencia AS UNSIGNED) ELSE NULL END, "
+                + "a.id_falla=CASE WHEN a.tipo='FALLA_PENDIENTE' "
+                + "THEN CAST(a.referencia AS UNSIGNED) ELSE NULL END, "
+                + "a.id_mantenimiento=CASE WHEN a.tipo IN "
+                + "('MANTENIMIENTO_PROXIMO','MANTENIMIENTO_VENCIDO','SOFTWARE_ACTUALIZACION') "
+                + "THEN CAST(a.referencia AS UNSIGNED) ELSE NULL END, "
+                + "a.id_inventario=CASE WHEN a.tipo IN "
+                + "('MANTENIMIENTO_REQUERIDO','EQUIPO_BAJA','EQUIPO_REVISION') "
+                + "THEN i.id_inventario ELSE NULL END WHERE a.tipo=? AND a.referencia=?";
+        try (PreparedStatement ps = conexion.prepareStatement(vincularOrigen)) {
+            ps.setString(1, tipo);
+            ps.setString(2, referencia);
+            ps.executeUpdate();
+        }
     }
 
     public void eliminarAlertasSinOrigenActivo(Connection conexion) throws SQLException {
@@ -126,7 +132,7 @@ public final class RepositorioAlertas {
             "DELETE a FROM alertas a WHERE a.tipo IN "
                 + "('MANTENIMIENTO_PROXIMO','MANTENIMIENTO_VENCIDO','SOFTWARE_ACTUALIZACION') "
                 + "AND NOT EXISTS (SELECT 1 FROM mantenimiento m "
-                + "WHERE m.id_mantenimiento=CAST(a.referencia AS UNSIGNED) "
+                + "WHERE m.id_mantenimiento=a.id_mantenimiento "
                 + "AND m.estado IN ('Pendiente','En proceso') "
                 + "AND ((a.tipo='MANTENIMIENTO_PROXIMO' AND m.fecha_programada>=CURDATE() "
                 + "AND m.fecha_programada<=DATE_ADD(CURDATE(), INTERVAL 7 DAY)) "
@@ -134,34 +140,34 @@ public final class RepositorioAlertas {
                 + "OR (a.tipo='SOFTWARE_ACTUALIZACION' AND m.fecha_programada "
                 + "<=DATE_ADD(CURDATE(), INTERVAL 7 DAY))))",
             "DELETE a FROM alertas a WHERE a.tipo='MANTENIMIENTO_REQUERIDO' "
-                + "AND NOT EXISTS (SELECT 1 FROM inventario i WHERE i.codigo=a.referencia "
-                + "AND i.estado NOT IN ('Dado de baja','En mantenimiento') "
+                + "AND NOT EXISTS (SELECT 1 FROM inventario i WHERE i.id_inventario=a.id_inventario "
+                + "AND i.estado NOT IN ('Baja','En mantenimiento') "
                 + "AND (i.ultimo_mantenimiento IS NULL OR i.ultimo_mantenimiento "
                 + "< DATE_SUB(CURDATE(), INTERVAL 180 DAY)) AND NOT EXISTS (SELECT 1 "
-                + "FROM mantenimiento m WHERE m.codigo_equipo=i.codigo "
+                + "FROM mantenimiento m WHERE m.id_inventario=i.id_inventario "
                 + "AND m.estado IN ('Pendiente','En proceso')))",
             "DELETE a FROM alertas a WHERE a.tipo='FALLA_PENDIENTE' "
                 + "AND NOT EXISTS (SELECT 1 FROM reporte_fallas f WHERE "
-                + "f.id_falla=CAST(a.referencia AS UNSIGNED) "
+                + "f.id_falla=a.id_falla "
                 + "AND f.estado NOT IN ('Atendida','Cancelada'))",
             "DELETE a FROM alertas a WHERE a.tipo='RESERVA_PENDIENTE' "
                 + "AND NOT EXISTS (SELECT 1 FROM reservas r WHERE "
-                + "r.id_reserva=CAST(a.referencia AS UNSIGNED) "
+                + "r.id_reserva=a.id_reserva "
                 + "AND r.estado='Pendiente' AND r.fecha>=CURDATE())",
             "DELETE a FROM alertas a WHERE a.tipo='RESERVA_APROBADA' "
                 + "AND NOT EXISTS (SELECT 1 FROM reservas r WHERE "
-                + "r.id_reserva=CAST(a.referencia AS UNSIGNED) AND r.estado='Aprobada')",
+                + "r.id_reserva=a.id_reserva AND r.estado='Aprobada')",
             "DELETE a FROM alertas a WHERE a.tipo='RESERVA_RECHAZADA' "
                 + "AND NOT EXISTS (SELECT 1 FROM reservas r WHERE "
-                + "r.id_reserva=CAST(a.referencia AS UNSIGNED) AND r.estado='Rechazada')",
+                + "r.id_reserva=a.id_reserva AND r.estado='Rechazada')",
             "DELETE a FROM alertas a WHERE a.tipo IN ('EQUIPO_REVISION','EQUIPO_BAJA') "
-                + "AND NOT EXISTS (SELECT 1 FROM inventario i WHERE i.codigo=a.referencia "
+                + "AND NOT EXISTS (SELECT 1 FROM inventario i WHERE i.id_inventario=a.id_inventario "
                 + "AND i.estado='Con falla' AND ((a.tipo='EQUIPO_REVISION' AND "
                 + "(SELECT COUNT(*) FROM reporte_fallas f WHERE "
-                + "f.codigo_equipo COLLATE utf8mb4_unicode_ci=i.codigo "
+                + "f.id_inventario=i.id_inventario "
                 + "AND f.estado<>'Cancelada') < 3) OR (a.tipo='EQUIPO_BAJA' AND "
                 + "(SELECT COUNT(*) FROM reporte_fallas f WHERE "
-                + "f.codigo_equipo COLLATE utf8mb4_unicode_ci=i.codigo "
+                + "f.id_inventario=i.id_inventario "
                 + "AND f.estado<>'Cancelada') >= 3)))"
         };
         for (String sql : consultas) {

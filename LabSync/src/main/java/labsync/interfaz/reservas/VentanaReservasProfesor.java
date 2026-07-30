@@ -12,6 +12,7 @@ import labsync.interfaz.autenticacion.VentanaInicioSesion;
 import labsync.interfaz.reservas.VentanaMisReservasProfesor;
 import labsync.interfaz.panel.VentanaPanelProfesor;
 import labsync.interfaz.fallas.VentanaReporteFallaProfesor;
+import labsync.persistencia.CatalogoLaboratorios;
 
 /**
  * Interfaz del usuario Profesor para AplicacionLabSync.
@@ -187,15 +188,14 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
         try { cantidad = Integer.parseInt(txtAlumnos.getText().trim()); }
         catch (NumberFormatException ex) { javax.swing.JOptionPane.showMessageDialog(this, "La cantidad de alumnos debe ser numérica."); return; }
         if (cantidad <= 0) { javax.swing.JOptionPane.showMessageDialog(this, "La cantidad de alumnos debe ser mayor a cero."); return; }
-        if (cantidad > ServicioDisponibilidad.MAXIMO_PERSONAS_POR_LABORATORIO) {
-            javax.swing.JOptionPane.showMessageDialog(this, "El límite es de 31 personas por laboratorio.", "Capacidad excedida", javax.swing.JOptionPane.WARNING_MESSAGE);
-            return;
-        }
         if (!sesion.estaIdentificada()) {
             javax.swing.JOptionPane.showMessageDialog(this, "La sesión no está identificada. Inicia sesión nuevamente.", "Sesión inválida", javax.swing.JOptionPane.ERROR_MESSAGE);
             return;
         }
-        String sql = "INSERT INTO reservas (id_usuario, nombre_solicitante, rol_solicitante, laboratorio, actividad, carrera, grado, grupo, turno, fecha, horario, cantidad_alumnos, estado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)";
+        String sql = "INSERT INTO reservas "
+                + "(id_usuario,id_laboratorio,actividad,carrera,grado,grupo,turno,fecha,"
+                + "hora_inicio,hora_fin,cantidad_alumnos,estado,observaciones) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,'Pendiente',?)";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             con.setAutoCommit(false);
@@ -213,22 +213,31 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
                     javax.swing.JOptionPane.showMessageDialog(this, disponibilidad.getMensaje(), "Horario ocupado", javax.swing.JOptionPane.WARNING_MESSAGE);
                     return;
                 }
+                if (cantidad > disponibilidad.getCapacidad()) {
+                    con.rollback();
+                    javax.swing.JOptionPane.showMessageDialog(this,
+                            "La capacidad de este laboratorio es de " + disponibilidad.getCapacidad() + " personas.",
+                            "Capacidad excedida", javax.swing.JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                int idLaboratorio = CatalogoLaboratorios.buscarIdDisponible(
+                        con, cmbLaboratorio.getSelectedItem().toString());
                 try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
                     ps.setInt(1, sesion.getId());
-                    ps.setString(2, sesion.getNombreCompleto());
-                    ps.setString(3, sesion.getRol());
-                    ps.setString(4, cmbLaboratorio.getSelectedItem().toString());
-                    ps.setString(5, txtActividad.getText().trim());
-                    ps.setString(6, cmbCarrera.getSelectedItem().toString());
-                    ps.setString(7, cmbGrado.getSelectedItem().toString());
-                    ps.setString(8, cmbGrupo.getSelectedItem().toString());
-                    ps.setString(9, cmbTurno.getSelectedItem().toString());
-                    ps.setDate(10, new java.sql.Date(dateFecha.getDate().getTime()));
-                    ps.setString(11, cmbHorario.getSelectedItem().toString());
-                    ps.setInt(12, cantidad);
+                    ps.setInt(2, idLaboratorio);
+                    ps.setString(3, txtActividad.getText().trim());
+                    ps.setString(4, cmbCarrera.getSelectedItem().toString());
+                    ps.setString(5, cmbGrado.getSelectedItem().toString());
+                    ps.setString(6, cmbGrupo.getSelectedItem().toString());
+                    ps.setString(7, cmbTurno.getSelectedItem().toString());
+                    ps.setDate(8, new java.sql.Date(dateFecha.getDate().getTime()));
+                    java.time.LocalTime[] intervalo = obtenerIntervaloSeleccionado();
+                    ps.setTime(9, java.sql.Time.valueOf(intervalo[0]));
+                    ps.setTime(10, java.sql.Time.valueOf(intervalo[1]));
+                    ps.setInt(11, cantidad);
                     String obs = txtObservaciones.getText().trim();
-                    if (obs.isEmpty()) ps.setNull(13, java.sql.Types.VARCHAR); else ps.setString(13, obs);
-                    ps.executeUpdate();
+                    if (obs.isEmpty()) ps.setNull(12, java.sql.Types.VARCHAR); else ps.setString(12, obs);
+                    if (ps.executeUpdate() != 1) throw new java.sql.SQLException("El laboratorio seleccionado no existe o no está disponible.");
                 }
                 con.commit();
             } catch (java.sql.SQLException ex) {
@@ -253,6 +262,13 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
                 java.time.format.DateTimeFormatter.ofPattern("H:mm"));
         cmbTurno.setSelectedItem(inicio.isBefore(java.time.LocalTime.of(14, 10))
                 ? "Matutino" : "Vespertino");
+    }
+
+    private java.time.LocalTime[] obtenerIntervaloSeleccionado() {
+        String[] partes = cmbHorario.getSelectedItem().toString().split("\\s*-\\s*");
+        java.time.format.DateTimeFormatter formato = java.time.format.DateTimeFormatter.ofPattern("H:mm");
+        return new java.time.LocalTime[]{java.time.LocalTime.parse(partes[0], formato),
+            java.time.LocalTime.parse(partes[1], formato)};
     }
 
     @SuppressWarnings("unchecked")
@@ -474,7 +490,7 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
         panelFormulario.add(cmbGrupo, new org.netbeans.lib.awtextra.AbsoluteConstraints(185, 214, 140, 28));
         lbAlumnos.setFont(new java.awt.Font("Arial", 1, 12));
         lbAlumnos.setForeground(new java.awt.Color(90, 90, 90));
-        lbAlumnos.setText("Personas (máximo 31)");
+        lbAlumnos.setText("Personas");
         panelFormulario.add(lbAlumnos, new org.netbeans.lib.awtextra.AbsoluteConstraints(345, 192, 180, 20));
         txtAlumnos.setBackground(new java.awt.Color(255, 255, 255));
         txtAlumnos.setFont(new java.awt.Font("Arial", 0, 12));
@@ -538,7 +554,7 @@ public class VentanaReservasProfesor extends javax.swing.JFrame {
         panelGuia.add(lbGuia1, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 60, 240, 38));
         lbGuia2.setFont(new java.awt.Font("Arial", 0, 12));
         lbGuia2.setForeground(new java.awt.Color(102, 102, 102));
-        lbGuia2.setText("<html>2. Captura la actividad, grupo, turno y personas (máximo 31).</html>");
+        lbGuia2.setText("<html>2. Captura la actividad, grupo, turno y personas.</html>");
         panelGuia.add(lbGuia2, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 105, 240, 48));
         lbGuia3.setFont(new java.awt.Font("Arial", 0, 12));
         lbGuia3.setForeground(new java.awt.Color(102, 102, 102));

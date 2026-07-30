@@ -20,11 +20,10 @@ public final class NotificacionesGlobales {
                 });
     }
 
-    public static void alumno(JFrame ventana, JPanel encabezado, String nombreUsuario) {
-        SesionUsuario sesion = SesionUsuario.buscarEstudiante(nombreUsuario);
+    public static void alumno(JFrame ventana, JPanel encabezado, SesionUsuario sesion) {
         new ControlNotificacionesReserva(ventana, encabezado, sesion.getId(),
                 sesion.getNombreCompleto(), "Estudiante", () -> {
-                    VentanaPanelAlumno destino = new VentanaPanelAlumno(sesion.getNombre());
+                    VentanaPanelAlumno destino = new VentanaPanelAlumno(sesion);
                     destino.setLocationRelativeTo(null);
                     destino.setVisible(true);
                     ventana.dispose();

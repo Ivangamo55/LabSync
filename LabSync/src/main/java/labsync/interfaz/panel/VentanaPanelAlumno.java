@@ -18,16 +18,22 @@ import labsync.modelo.SesionUsuario;
  */
 public class VentanaPanelAlumno extends javax.swing.JFrame {
 
-    private String nombreUsuario;
-    private SesionUsuario sesion;
+    private final String nombreUsuario;
+    private final SesionUsuario sesion;
 
     public VentanaPanelAlumno() {
         this("Usuario");
     }
 
     public VentanaPanelAlumno(String nombreRecibido) {
-        this.sesion = SesionUsuario.buscarEstudiante(nombreRecibido);
-        this.nombreUsuario = sesion.getNombre();
+        this(SesionUsuario.buscarEstudiante(nombreRecibido));
+    }
+
+    public VentanaPanelAlumno(SesionUsuario sesion) {
+        this.sesion = sesion == null
+                ? new SesionUsuario(0, "Usuario", "Usuario", "Estudiante")
+                : sesion;
+        this.nombreUsuario = this.sesion.getNombre();
         initComponents();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
@@ -55,12 +61,12 @@ public class VentanaPanelAlumno extends javax.swing.JFrame {
     }
 
     private ResumenAlumno consultarResumenAlumno() {
-        ConsultaTabla.Parametros usuario = ps -> ps.setString(1, nombreUsuario);
-        String filtro = "SUBSTRING_INDEX(TRIM(nombre_solicitante), ' ', 1) = ?";
+        ConsultaTabla.Parametros usuario = ps -> ps.setInt(1, sesion.getId());
+        String filtro = "id_usuario=?";
         Object activas = ConsultaEscalar.ejecutar("SELECT COUNT(*) total FROM reservas WHERE " + filtro + " AND estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE()", "total", usuario);
         Object proxima = ConsultaEscalar.ejecutar("SELECT MIN(fecha) proxima FROM reservas WHERE " + filtro + " AND estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE()", "proxima", usuario);
-        Object reportes = ConsultaEscalar.ejecutar("SELECT COUNT(*) total FROM reporte_fallas WHERE SUBSTRING_INDEX(TRIM(reportado_por), ' ', 1) = ? AND rol_reportante = 'Estudiante' AND estado IN ('Pendiente', 'En revisión')", "total", usuario);
-        javax.swing.table.DefaultTableModel tabla = ConsultaTabla.ejecutar("SELECT fecha, horario, laboratorio, actividad, estado FROM reservas WHERE " + filtro + " AND fecha >= CURDATE() AND estado IN ('Pendiente','Aprobada') ORDER BY fecha, horario LIMIT 5", new String[]{"Fecha","Horario","Laboratorio","Actividad","Estado"}, new String[]{"fecha","horario","laboratorio","actividad","estado"}, usuario);
+        Object reportes = ConsultaEscalar.ejecutar("SELECT COUNT(*) total FROM reporte_fallas WHERE id_usuario=? AND estado IN ('Pendiente','En revisión')", "total", usuario);
+        javax.swing.table.DefaultTableModel tabla = ConsultaTabla.ejecutar("SELECT r.fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre laboratorio,r.actividad,r.estado FROM reservas r JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE r.id_usuario=? AND r.fecha>=CURDATE() AND r.estado IN ('Pendiente','Aprobada') ORDER BY r.fecha,r.hora_inicio LIMIT 5", new String[]{"Fecha","Horario","Laboratorio","Actividad","Estado"}, new String[]{"fecha","horario","laboratorio","actividad","estado"}, usuario);
         return new ResumenAlumno(String.valueOf(activas == null ? "-" : activas), proxima == null ? "Sin reservas" : proxima.toString(), String.valueOf(reportes == null ? "-" : reportes), tabla);
     }
 
@@ -93,13 +99,13 @@ public class VentanaPanelAlumno extends javax.swing.JFrame {
     }
 
     private void abrirReservas() {
-        VentanaReservasAlumno reservas = new VentanaReservasAlumno(nombreUsuario);
+        VentanaReservasAlumno reservas = new VentanaReservasAlumno(sesion);
         reservas.setVisible(true);
         dispose();
     }
 
     private void abrirReporteFallas() {
-        VentanaReporteFallaAlumno reportes = new VentanaReporteFallaAlumno(nombreUsuario);
+        VentanaReporteFallaAlumno reportes = new VentanaReporteFallaAlumno(sesion);
         reportes.setVisible(true);
         dispose();
     }
@@ -114,7 +120,7 @@ public class VentanaPanelAlumno extends javax.swing.JFrame {
             return;
         }
 
-        String filtro = "SUBSTRING_INDEX(TRIM(nombre_solicitante), ' ', 1) = ?";
+        String filtro = "id_usuario=?";
         try (con) {
             String sqlResumen = "SELECT SUM(CASE WHEN estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE() THEN 1 ELSE 0 END) activas, "
                 + "MIN(CASE WHEN estado IN ('Pendiente','Aprobada') AND fecha >= CURDATE() THEN fecha END) proxima "
@@ -131,9 +137,10 @@ public class VentanaPanelAlumno extends javax.swing.JFrame {
                 }
             }
 
-            String sqlTabla = "SELECT fecha, horario, laboratorio, actividad, estado FROM reservas WHERE " + filtro
-                + " AND fecha >= CURDATE() AND estado IN ('Pendiente','Aprobada') "
-                + "ORDER BY fecha, horario LIMIT 5";
+            String sqlTabla = "SELECT r.fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre AS laboratorio,r.actividad,r.estado "
+                + "FROM reservas r JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+                + "WHERE r.id_usuario=? "
+                + "AND r.fecha>=CURDATE() AND r.estado IN ('Pendiente','Aprobada') ORDER BY r.fecha,r.hora_inicio LIMIT 5";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlTabla)) {
                 asignarUsuario(ps);
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
@@ -144,8 +151,8 @@ public class VentanaPanelAlumno extends javax.swing.JFrame {
             }
 
             String sqlReportes = "SELECT COUNT(*) total FROM reporte_fallas "
-                + "WHERE SUBSTRING_INDEX(TRIM(reportado_por), ' ', 1) = ? "
-                + "AND rol_reportante = 'Estudiante' AND estado IN ('Pendiente', 'En revisión')";
+                + "WHERE id_usuario=? "
+                + "AND estado IN ('Pendiente','En revisión')";
             try (java.sql.PreparedStatement ps = con.prepareStatement(sqlReportes)) {
                 asignarUsuario(ps);
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
@@ -161,7 +168,7 @@ public class VentanaPanelAlumno extends javax.swing.JFrame {
     }
 
     private void asignarUsuario(java.sql.PreparedStatement ps) throws java.sql.SQLException {
-        ps.setString(1, nombreUsuario);
+        ps.setInt(1, sesion.getId());
     }
 
     private void mostrarTodasReservas() {
@@ -173,9 +180,9 @@ public class VentanaPanelAlumno extends javax.swing.JFrame {
                 return false;
             }
         };
-        String sql = "SELECT fecha, horario, laboratorio, actividad, estado FROM reservas "
-            + "WHERE SUBSTRING_INDEX(TRIM(nombre_solicitante), ' ', 1) = ? "
-            + "ORDER BY fecha DESC, horario";
+        String sql = "SELECT r.fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre AS laboratorio,r.actividad,r.estado FROM reservas r "
+            + "JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+            + "WHERE r.id_usuario=? ORDER BY r.fecha DESC,r.hora_inicio";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) {
                 javax.swing.JOptionPane.showMessageDialog(this, "No fue posible conectarse con la base de datos.", "Error de conexion", javax.swing.JOptionPane.ERROR_MESSAGE);

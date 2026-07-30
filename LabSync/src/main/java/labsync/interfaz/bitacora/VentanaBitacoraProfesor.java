@@ -130,11 +130,11 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
     }
 
     private void cargarReservasAprobadas(Integer idReservaPreferida) {
-        String sql = "SELECT id_reserva, laboratorio, actividad, carrera, grado, grupo, turno, fecha, horario, cantidad_alumnos FROM reservas "
-                + "WHERE (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?)) "
-                + "AND rol_solicitante = 'Profesor' AND estado = 'Aprobada' "
-                + "AND cantidad_alumnos BETWEEN 1 AND 31 "
-                + "AND fecha <= CURRENT_DATE ORDER BY fecha DESC, horario, id_reserva";
+        String sql = "SELECT r.id_reserva,l.nombre AS laboratorio,r.actividad,r.carrera,r.grado,r.grupo,r.turno,r.fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.cantidad_alumnos FROM reservas r "
+                + "JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+                + "WHERE r.id_usuario=? AND u.rol='Profesor' AND r.estado='Aprobada' "
+                + "AND r.cantidad_alumnos > 0 "
+                + "AND r.fecha <= CURRENT_DATE ORDER BY r.fecha DESC,r.hora_inicio,r.id_reserva";
         actualizandoSelector = true;
         reservasDisponibles.clear();
         cmbReservas.removeAllItems();
@@ -143,7 +143,6 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
                 ps.setInt(1, sesion.getId());
-                ps.setString(2, sesion.getNombreCompleto());
                 try (java.sql.ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         ReservaBitacora reserva = new ReservaBitacora(rs.getInt("id_reserva"), rs.getDate("fecha"),
@@ -228,7 +227,7 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
             return;
         }
         if (!sesion.estaIdentificada()) { javax.swing.JOptionPane.showMessageDialog(this, "La sesión no está identificada. Inicia sesión nuevamente.", "Sesión inválida", javax.swing.JOptionPane.ERROR_MESSAGE); return; }
-        String sql = "INSERT INTO bitacora (fecha, nombre_usuario, rol_usuario, carrera_dependencia, grado, grupo, laboratorio, actividad_materia, turno, horario, total_usuarios, estado, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO bitacora (id_usuario,id_reserva,fecha,nombre_usuario,rol_usuario,carrera_dependencia,grado,grupo,laboratorio,actividad_materia,turno,horario,total_usuarios,estado,observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
             if (con == null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             con.setAutoCommit(false);
@@ -239,7 +238,7 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
                 return;
             }
             try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
-                ps.setDate(1, new java.sql.Date(dateFecha.getDate().getTime())); ps.setString(2, sesion.getNombreCompleto()); ps.setString(3, sesion.getRol()); ps.setString(4, txtCarrera.getText().trim()); ps.setString(5, cmbGrado.getSelectedItem().toString()); ps.setString(6, cmbGrupo.getSelectedItem().toString()); ps.setString(7, cmbLaboratorio.getSelectedItem().toString()); ps.setString(8, txtActividad.getText().trim()); ps.setString(9, cmbTurno.getSelectedItem().toString()); ps.setString(10, txtHorario.getText().trim()); ps.setInt(11, Integer.parseInt(txtTotalUsuarios.getText())); ps.setString(12, "Registrado"); String obs=txtObservaciones.getText().trim(); if(obs.isEmpty()) ps.setNull(13,java.sql.Types.VARCHAR); else ps.setString(13,obs); ps.executeUpdate();
+                ps.setInt(1,sesion.getId()); ps.setInt(2,idReserva); ps.setDate(3,new java.sql.Date(dateFecha.getDate().getTime())); ps.setString(4,sesion.getNombreCompleto()); ps.setString(5,sesion.getRol()); ps.setString(6,txtCarrera.getText().trim()); ps.setString(7,cmbGrado.getSelectedItem().toString()); ps.setString(8,cmbGrupo.getSelectedItem().toString()); ps.setString(9,cmbLaboratorio.getSelectedItem().toString()); ps.setString(10,txtActividad.getText().trim()); ps.setString(11,cmbTurno.getSelectedItem().toString()); ps.setString(12,txtHorario.getText().trim()); ps.setInt(13,Integer.parseInt(txtTotalUsuarios.getText())); ps.setString(14,"Registrado"); String obs=txtObservaciones.getText().trim(); if(obs.isEmpty()) ps.setNull(15,java.sql.Types.VARCHAR); else ps.setString(15,obs); ps.executeUpdate();
             }
             con.commit();
             javax.swing.JOptionPane.showMessageDialog(this, "La reserva se registró en la bitácora.", "Registro guardado", javax.swing.JOptionPane.INFORMATION_MESSAGE);
@@ -249,11 +248,11 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
 
     private boolean marcarReservaFinalizada(java.sql.Connection con, int idReserva) throws java.sql.SQLException {
         String sql = "UPDATE reservas SET estado = 'Finalizada' WHERE id_reserva = ? AND estado = 'Aprobada' "
-                + "AND rol_solicitante = 'Profesor' AND (id_usuario = ? OR (id_usuario IS NULL AND nombre_solicitante = ?))";
+                + "AND id_usuario=? AND EXISTS (SELECT 1 FROM usuario WHERE id=? AND rol='Profesor')";
         try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, idReserva);
             ps.setInt(2, sesion.getId());
-            ps.setString(3, sesion.getNombreCompleto());
+            ps.setInt(3, sesion.getId());
             return ps.executeUpdate() == 1;
         }
     }
@@ -280,9 +279,10 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
                 + "WHERE h.id_profesor=? AND h.activo=1 AND c.activo=1 AND CURRENT_DATE BETWEEN c.fecha_inicio AND c.fecha_fin "
                 + "AND h.dia_semana=ELT(WEEKDAY(CURRENT_DATE)+1,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo') "
                 + "ORDER BY h.hora_inicio";
-        String reservas = "SELECT id_reserva,fecha,horario,laboratorio,actividad,carrera,grado,grupo,turno,cantidad_alumnos "
-                + "FROM reservas WHERE id_usuario=? AND rol_solicitante='Profesor' AND estado='Aprobada' "
-                + "AND fecha<=CURRENT_DATE ORDER BY fecha,horario";
+        String reservas = "SELECT r.id_reserva,r.fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre AS laboratorio,r.actividad,r.carrera,r.grado,r.grupo,r.turno,r.cantidad_alumnos "
+                + "FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
+                + "WHERE r.id_usuario=? AND u.rol='Profesor' AND r.estado='Aprobada' "
+                + "AND r.fecha<=CURRENT_DATE ORDER BY r.fecha,r.hora_inicio";
         try (java.sql.Connection con=ConexionBaseDatos.conectar()) {
             if(con==null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             try(java.sql.PreparedStatement ps=con.prepareStatement(clases)) {
@@ -340,21 +340,21 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
         int total;
         try { total=Integer.parseInt(txtTotalUsuarios.getText().trim()); }
         catch(NumberFormatException ex) { total=0; }
-        if(total<1 || total>31) {
-            javax.swing.JOptionPane.showMessageDialog(this,"El total debe estar entre 1 y 31 personas, incluido el profesor.","Total inválido",javax.swing.JOptionPane.WARNING_MESSAGE); return;
+        if(total<1) {
+            javax.swing.JOptionPane.showMessageDialog(this,"El total de personas debe ser mayor a cero.","Total inválido",javax.swing.JOptionPane.WARNING_MESSAGE); return;
         }
         EntradaProgramada e=entradasProgramadas.get(indice);
-        String insertar="INSERT INTO bitacora(id_horario,id_reserva,fecha,nombre_usuario,rol_usuario,carrera_dependencia,grado,grupo,laboratorio,actividad_materia,turno,horario,total_usuarios,estado,observaciones) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'Registrado',?)";
+        String insertar="INSERT INTO bitacora(id_usuario,id_horario,id_reserva,fecha,nombre_usuario,rol_usuario,carrera_dependencia,grado,grupo,laboratorio,actividad_materia,turno,horario,total_usuarios,estado,observaciones) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Registrado',?)";
         try(java.sql.Connection con=ConexionBaseDatos.conectar()) {
             if(con==null) throw new java.sql.SQLException("No hay conexión con la base de datos.");
             con.setAutoCommit(false);
             try(java.sql.PreparedStatement ps=con.prepareStatement(insertar)) {
-                if(e.idHorario()==null) ps.setNull(1,java.sql.Types.INTEGER); else ps.setInt(1,e.idHorario());
-                if(e.idReserva()==null) ps.setNull(2,java.sql.Types.INTEGER); else ps.setInt(2,e.idReserva());
-                ps.setDate(3,e.fecha()); ps.setString(4,sesion.getNombreCompleto()); ps.setString(5,sesion.getRol());
-                ps.setString(6,e.carrera()); ps.setString(7,e.grado()); ps.setString(8,e.grupo()); ps.setString(9,e.laboratorio());
-                ps.setString(10,e.actividad()); ps.setString(11,e.turno()); ps.setString(12,e.horario()); ps.setInt(13,total);
-                String obs=txtObservaciones.getText().trim(); if(obs.isEmpty()) ps.setNull(14,java.sql.Types.VARCHAR); else ps.setString(14,obs);
+                ps.setInt(1,sesion.getId()); if(e.idHorario()==null) ps.setNull(2,java.sql.Types.INTEGER); else ps.setInt(2,e.idHorario());
+                if(e.idReserva()==null) ps.setNull(3,java.sql.Types.INTEGER); else ps.setInt(3,e.idReserva());
+                ps.setDate(4,e.fecha()); ps.setString(5,sesion.getNombreCompleto()); ps.setString(6,sesion.getRol());
+                ps.setString(7,e.carrera()); ps.setString(8,e.grado()); ps.setString(9,e.grupo()); ps.setString(10,e.laboratorio());
+                ps.setString(11,e.actividad()); ps.setString(12,e.turno()); ps.setString(13,e.horario()); ps.setInt(14,total);
+                String obs=txtObservaciones.getText().trim(); if(obs.isEmpty()) ps.setNull(15,java.sql.Types.VARCHAR); else ps.setString(15,obs);
                 ps.executeUpdate();
             }
             if(e.idReserva()!=null) {
@@ -633,7 +633,7 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
         panelFormulario.add(txtActividad, new org.netbeans.lib.awtextra.AbsoluteConstraints(25, 281, 390, 28));
         lbTotal.setFont(new java.awt.Font("Arial", 1, 12));
         lbTotal.setForeground(new java.awt.Color(90, 90, 90));
-        lbTotal.setText("Personas (máximo 31)");
+        lbTotal.setText("Personas");
         panelFormulario.add(lbTotal, new org.netbeans.lib.awtextra.AbsoluteConstraints(435, 259, 180, 18));
         txtTotalUsuarios.setBackground(new java.awt.Color(255, 255, 255));
         txtTotalUsuarios.setFont(new java.awt.Font("Arial", 0, 12));

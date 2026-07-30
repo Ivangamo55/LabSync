@@ -118,7 +118,7 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
 
     private void iniciarActualizacionAutomatica() {
         new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT id_mantenimiento, codigo_equipo, nombre_equipo, laboratorio, tipo_mantenimiento, DATE_FORMAT(fecha_programada, '%Y-%m-%d') fecha_programada, estado, responsable, IFNULL(observaciones, '') observaciones FROM mantenimiento WHERE estado IN ('Pendiente', 'En proceso') ORDER BY fecha_programada DESC",
+                "SELECT m.id_mantenimiento,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,m.tipo_mantenimiento,DATE_FORMAT(m.fecha_programada,'%Y-%m-%d') fecha_programada,m.estado,m.responsable,IFNULL(m.observaciones,'') observaciones FROM mantenimiento m JOIN inventario i ON i.id_inventario=m.id_inventario JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio WHERE m.estado IN ('Pendiente','En proceso') ORDER BY m.fecha_programada DESC",
                 new String[]{"ID", "Código Equipo", "Nombre Equipo", "Laboratorio", "Tipo Mantenimiento", "Fecha Programada", "Estado", "Responsable", "Observaciones"},
                 new String[]{"id_mantenimiento", "codigo_equipo", "nombre_equipo", "laboratorio", "tipo_mantenimiento", "fecha_programada", "estado", "responsable", "observaciones"}),
                 modelo -> { tablaMantenimiento.setModel(modelo); ocultarColumnaID(); ocultarColumnaNombreEquipo(); });
@@ -321,9 +321,9 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
             return;
         }
 
-        String sql = "SELECT laboratorio "
-                + "FROM inventario "
-                + "WHERE codigo = ?";
+        String sql = "SELECT l.nombre laboratorio "
+                + "FROM inventario i JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
+                + "WHERE i.codigo = ?";
 
         try {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
@@ -561,12 +561,11 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         ocultarColumnaID();
         ocultarColumnaNombreEquipo();
         
-        String sql = "SELECT id_mantenimiento, codigo_equipo, nombre_equipo, laboratorio, tipo_mantenimiento, "
-            + "DATE_FORMAT(fecha_programada, '%Y-%m-%d') AS fecha_programada, "
-            + "estado, responsable, IFNULL(observaciones, '') AS observaciones "
-            + "FROM mantenimiento "
-            + "WHERE estado IN ('Pendiente', 'En proceso') "
-            + "ORDER BY fecha_programada DESC";
+        String sql = "SELECT m.id_mantenimiento,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,m.tipo_mantenimiento, "
+            + "DATE_FORMAT(m.fecha_programada, '%Y-%m-%d') AS fecha_programada, "
+            + "m.estado,m.responsable,IFNULL(m.observaciones,'') AS observaciones FROM mantenimiento m "
+            + "JOIN inventario i ON i.id_inventario=m.id_inventario JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
+            + "WHERE m.estado IN ('Pendiente','En proceso') ORDER BY m.fecha_programada DESC";
         
         java.sql.Connection con = ConexionBaseDatos.conectar();
         
@@ -638,17 +637,17 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
         String laboratorioSeleccionado = cmbLaboratorio.getSelectedItem().toString();
         
-        String sql = "SELECT id_mantenimiento, codigo_equipo, nombre_equipo, laboratorio, tipo_mantenimiento, "
+        String sql = "SELECT m.id_mantenimiento,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,m.tipo_mantenimiento, "
             + "DATE_FORMAT(fecha_programada, '%Y-%m-%d') AS fecha_programada, "
-            + "estado, responsable, IFNULL(observaciones, '') AS observaciones "
-            + "FROM mantenimiento WHERE 1=1 ";
+            + "m.estado,m.responsable,IFNULL(m.observaciones,'') AS observaciones FROM mantenimiento m "
+            + "JOIN inventario i ON i.id_inventario=m.id_inventario JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio WHERE 1=1 ";
         
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
         if (!textoBusqueda.isEmpty()) {
-            sql += "AND (codigo_equipo LIKE ? "
-                    + "OR laboratorio LIKE ? "
-                    + "OR responsable LIKE ?) ";
+            sql += "AND (i.codigo LIKE ? "
+                    + "OR l.nombre LIKE ? "
+                    + "OR m.responsable LIKE ?) ";
 
             String busqueda = "%" + textoBusqueda + "%";
 
@@ -658,19 +657,19 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         }
         
         if (!tipoSeleccionado.equals("Todos")) {
-            sql += "AND tipo_mantenimiento = ? ";
+            sql += "AND m.tipo_mantenimiento = ? ";
             parametros.add(tipoSeleccionado);
         }
         
         if (!estadoSeleccionado.equals("Todos")) {
-            sql += "AND estado = ? ";
+            sql += "AND m.estado = ? ";
             parametros.add(estadoSeleccionado);
         } else {
-            sql += "AND estado IN ('Pendiente', 'En proceso') ";
+            sql += "AND m.estado IN ('Pendiente', 'En proceso') ";
         }
         
         if (!laboratorioSeleccionado.equals("Todos")) {
-            sql += "AND laboratorio = ? ";
+            sql += "AND l.nombre = ? ";
             parametros.add(laboratorioSeleccionado);
         }
         
@@ -876,29 +875,24 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
             return false;
         }
 
-        String sql = "UPDATE mantenimiento SET "
-                + "codigo_equipo = ?, "
-                + "nombre_equipo = ?, "
-                + "laboratorio = ?, "
-                + "tipo_mantenimiento = ?, "
-                + "fecha_programada = ?, "
-                + "estado = ?, "
-                + "responsable = ?, "
-                + "observaciones = ? "
-                + "WHERE id_mantenimiento = ?";
+        String sql = "UPDATE mantenimiento m JOIN inventario i ON i.codigo=? SET m.id_inventario=i.id_inventario, "
+                + "m.tipo_mantenimiento = ?, "
+                + "m.fecha_programada = ?, "
+                + "m.estado = ?, "
+                + "m.responsable = ?, "
+                + "m.observaciones = ? "
+                + "WHERE m.id_mantenimiento = ?";
 
         try {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
 
             ps.setString(1, codigoEquipo);
-            ps.setString(2, nombreEquipo);
-            ps.setString(3, laboratorio);
-            ps.setString(4, tipoMantenimiento);
-            ps.setString(5, fechaProgramada);
-            ps.setString(6, estadoMantenimiento);
-            ps.setString(7, responsable);
-            ps.setString(8, observaciones);
-            ps.setInt(9, idMantenimientoSeleccionado);
+            ps.setString(2, tipoMantenimiento);
+            ps.setString(3, fechaProgramada);
+            ps.setString(4, estadoMantenimiento);
+            ps.setString(5, responsable);
+            ps.setString(6, observaciones);
+            ps.setInt(7, idMantenimientoSeleccionado);
 
             int filas = ps.executeUpdate();
 
@@ -1002,9 +996,9 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         }
         
         String sql = "SELECT COUNT(*) AS total "
-            + "FROM mantenimiento "
-            + "WHERE codigo_equipo = ? "
-            + "AND estado IN ('Pendiente', 'En proceso')";
+            + "FROM mantenimiento m JOIN inventario i ON i.id_inventario=m.id_inventario "
+            + "WHERE i.codigo = ? "
+            + "AND m.estado IN ('Pendiente', 'En proceso')";
         
         try {
             java.sql.PreparedStatement ps = con.prepareStatement(sql);
@@ -1063,26 +1057,19 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
         String laboratorioSeleccionado = cmbLaboratorio.getSelectedItem().toString();
 
-        String sql = "SELECT "
-            + "codigo_equipo, "
-            + "nombre_equipo, "
-            + "laboratorio, "
-            + "tipo_mantenimiento, "
-            + "DATE_FORMAT(fecha_programada, '%d/%m/%Y') AS fecha_programada, "
-            + "estado, "
-            + "responsable, "
-            + "IFNULL(observaciones, '') AS observaciones "
-            + "FROM mantenimiento "
+        String sql = "SELECT i.codigo AS codigo_equipo, i.nombre_equipo, "
+            + "l.nombre AS laboratorio, m.tipo_mantenimiento, "
+            + "DATE_FORMAT(m.fecha_programada, '%d/%m/%Y') AS fecha_programada, "
+            + "m.estado, m.responsable, IFNULL(m.observaciones, '') AS observaciones "
+            + "FROM mantenimiento m JOIN inventario i ON i.id_inventario=m.id_inventario "
+            + "JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
             + "WHERE 1=1 ";
 
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
 
         if (!textoBusqueda.isEmpty()) {
-            sql += "AND (codigo_equipo LIKE ? "
-                + "OR nombre_equipo LIKE ? "
-                + "OR laboratorio LIKE ? "
-                + "OR estado LIKE ? "
-                + "OR responsable LIKE ?) ";
+            sql += "AND (i.codigo LIKE ? OR i.nombre_equipo LIKE ? "
+                + "OR l.nombre LIKE ? OR m.estado LIKE ? OR m.responsable LIKE ?) ";
 
             String busqueda = "%" + textoBusqueda + "%";
 
@@ -1094,23 +1081,23 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         }
 
         if (!tipoSeleccionado.equals("Todos")) {
-            sql += "AND tipo_mantenimiento = ? ";
+            sql += "AND m.tipo_mantenimiento = ? ";
             parametros.add(tipoSeleccionado);
         }
 
         if (!estadoSeleccionado.equals("Todos")) {
-            sql += "AND estado = ? ";
+            sql += "AND m.estado = ? ";
             parametros.add(estadoSeleccionado);
         } else {
-            sql += "AND estado IN ('Pendiente', 'En proceso') ";
+            sql += "AND m.estado IN ('Pendiente', 'En proceso') ";
         }
 
         if (!laboratorioSeleccionado.equals("Todos")) {
-            sql += "AND laboratorio = ? ";
+            sql += "AND l.nombre = ? ";
             parametros.add(laboratorioSeleccionado);
         }
 
-        sql += "ORDER BY fecha_programada DESC";
+        sql += "ORDER BY m.fecha_programada DESC";
 
         java.sql.Connection con = ConexionBaseDatos.conectar();
 

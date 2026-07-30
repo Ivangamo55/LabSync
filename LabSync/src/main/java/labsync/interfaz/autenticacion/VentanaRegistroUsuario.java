@@ -463,13 +463,15 @@ public class VentanaRegistroUsuario extends javax.swing.JFrame {
                 // 2. INSERCIÓN EN TABLA HIJA
                 if (idGenerado != -1) {
                     if (rolSeleccionado.equals("Estudiante")) { 
-                        String sqlAlumno = "INSERT INTO estudiante (id_usuario, matricula, carrera, turno) VALUES (?, ?, ?, ?)";
+                        String sqlAlumno = "INSERT INTO estudiante (id_usuario,matricula,id_trayectoria,turno) SELECT ?,?,id_trayectoria,? FROM trayectorias WHERE codigo=SUBSTRING_INDEX(?,' - ',-1) AND activa=1";
                         java.sql.PreparedStatement psAlumno = con.prepareStatement(sqlAlumno);
                         psAlumno.setInt(1, idGenerado);
                         psAlumno.setString(2, datoExtra1); 
-                        psAlumno.setString(3, datoExtra2); 
-                        psAlumno.setString(4, datoExtra3); 
-                        psAlumno.executeUpdate();
+                            psAlumno.setString(3, datoExtra3);
+                            psAlumno.setString(4, datoExtra2);
+                        if (psAlumno.executeUpdate() != 1) {
+                            throw new java.sql.SQLException("La trayectoria académica seleccionada no existe o está inactiva.");
+                        }
                         
                     } else if (rolSeleccionado.equals("Laboratorista")) {
                         String sqlLab = "INSERT INTO laboratorista (id_usuario, turno, piso_encargado) VALUES (?, ?, ?)";
