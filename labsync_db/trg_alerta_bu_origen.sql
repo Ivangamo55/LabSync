@@ -23,11 +23,10 @@ BEGIN
      +(NEW.id_mantenimiento IS NOT NULL)+(NEW.id_inventario IS NOT NULL)<>1 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='La alerta debe tener exactamente un origen válido';
   END IF;
-  IF (NEW.id_reserva IS NOT NULL AND NEW.referencia<>CAST(NEW.id_reserva AS CHAR))
-     OR (NEW.id_falla IS NOT NULL AND NEW.referencia<>CAST(NEW.id_falla AS CHAR))
-     OR (NEW.id_mantenimiento IS NOT NULL AND NEW.referencia<>CAST(NEW.id_mantenimiento AS CHAR))
+  IF (NEW.id_reserva IS NOT NULL AND CAST(NEW.referencia AS UNSIGNED)<>NEW.id_reserva)
+     OR (NEW.id_falla IS NOT NULL AND CAST(NEW.referencia AS UNSIGNED)<>NEW.id_falla)
+     OR (NEW.id_mantenimiento IS NOT NULL AND CAST(NEW.referencia AS UNSIGNED)<>NEW.id_mantenimiento)
      OR (NEW.id_inventario IS NOT NULL AND NEW.referencia<>(SELECT codigo FROM inventario WHERE id_inventario=NEW.id_inventario)) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='La referencia no corresponde con el origen de la alerta';
   END IF;
 END;
-

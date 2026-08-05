@@ -21,8 +21,9 @@ create table inventario
         foreign key (id_laboratorio) references laboratorios (id_laboratorio)
             on update cascade
 )
-    engine = InnoDB;
+    engine = InnoDB
+    default character set = utf8mb4
+    collate = utf8mb4_unicode_ci;
 
 create index idx_inventario_laboratorio
     on inventario (id_laboratorio);
-

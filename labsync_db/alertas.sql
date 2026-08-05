@@ -33,8 +33,9 @@ create table alertas
         check (((((`id_reserva` is not null) + (`id_falla` is not null)) + (`id_mantenimiento` is not null)) +
                 (`id_inventario` is not null)) = 1)
 )
-    engine = InnoDB;
+    engine = InnoDB
+    default character set = utf8mb4
+    collate = utf8mb4_unicode_ci;
 
 create index idx_alerta_estado_prioridad
     on alertas (estado, prioridad);
-
