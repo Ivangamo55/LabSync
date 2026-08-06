@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,6 +17,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -179,28 +181,137 @@ class RepositorioAlertasTest {
     }
 
     @Test
-    void guardarGenerada_datosValidos_insertaYVinculaOrigen() throws Exception {
-        // Arrange
-        PreparedStatement insercion = mock(PreparedStatement.class);
-        PreparedStatement vinculacion = mock(PreparedStatement.class);
-        when(conexion.prepareStatement(anyString())).thenReturn(insercion, vinculacion);
+    void guardarGenerada_falla_insertaIdFalla() throws Exception {
+        when(sentencia.executeUpdate()).thenReturn(1);
 
-        // Act
-        repositorio.guardarGenerada(conexion, "FALLA_PENDIENTE", "8",
-                "Falla pendiente", "Equipo sin conexión", "Alta");
+        repositorio.guardarGenerada(conexion, null, 8, null, null,
+                "FALLA_PENDIENTE", "Falla #8", "Falla pendiente",
+                "Equipo sin conexión", "Alta");
 
-        // Assert
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(conexion).prepareStatement(sql.capture());
         assertAll(
-                () -> verify(insercion).setString(1, "FALLA_PENDIENTE"),
-                () -> verify(insercion).setString(2, "8"),
-                () -> verify(insercion).setString(3, "Falla pendiente"),
-                () -> verify(insercion).setString(4, "Equipo sin conexión"),
-                () -> verify(insercion).setString(5, "Alta"),
-                () -> verify(insercion).executeUpdate(),
-                () -> verify(vinculacion).setString(1, "FALLA_PENDIENTE"),
-                () -> verify(vinculacion).setString(2, "8"),
-                () -> verify(vinculacion).executeUpdate(),
-                () -> verify(insercion).close(),
-                () -> verify(vinculacion).close());
+                () -> assertTrue(sql.getValue().contains(
+                        "id_reserva, id_falla, id_mantenimiento")),
+                () -> verify(sentencia).setNull(1, Types.INTEGER),
+                () -> verify(sentencia).setInt(2, 8),
+                () -> verify(sentencia).setNull(3, Types.INTEGER),
+                () -> verify(sentencia).setNull(4, Types.INTEGER),
+                () -> verify(sentencia).setString(5, "FALLA_PENDIENTE"),
+                () -> verify(sentencia).setString(6, "Falla #8"),
+                () -> verify(sentencia).setString(7, "Falla pendiente"),
+                () -> verify(sentencia).setString(8, "Equipo sin conexión"),
+                () -> verify(sentencia).setString(9, "Alta"),
+                () -> verify(sentencia).executeUpdate(),
+                () -> verify(sentencia).close());
+    }
+
+    @Test
+    void guardarGenerada_reserva_insertaIdReserva() throws Exception {
+        when(sentencia.executeUpdate()).thenReturn(1);
+
+        repositorio.guardarGenerada(conexion, 15, null, null, null,
+                "RESERVA_PENDIENTE", "Reserva #15", "Reserva pendiente",
+                "Detalle", "Media");
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(conexion).prepareStatement(sql.capture());
+        assertAll(
+                () -> assertTrue(sql.getValue().contains("id_reserva")),
+                () -> verify(sentencia).setInt(1, 15),
+                () -> verify(sentencia).setNull(2, Types.INTEGER),
+                () -> verify(sentencia).setNull(3, Types.INTEGER),
+                () -> verify(sentencia).setNull(4, Types.INTEGER));
+    }
+
+    @Test
+    void guardarGenerada_mantenimiento_insertaIdMantenimiento() throws Exception {
+        when(sentencia.executeUpdate()).thenReturn(1);
+
+        repositorio.guardarGenerada(conexion, null, null, 9, null,
+                "MANTENIMIENTO_PROXIMO", "Mantenimiento #9",
+                "Mantenimiento próximo", "Detalle", "Alta");
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(conexion).prepareStatement(sql.capture());
+        assertAll(
+                () -> assertTrue(sql.getValue().contains("id_mantenimiento")),
+                () -> verify(sentencia).setNull(1, Types.INTEGER),
+                () -> verify(sentencia).setNull(2, Types.INTEGER),
+                () -> verify(sentencia).setInt(3, 9),
+                () -> verify(sentencia).setNull(4, Types.INTEGER));
+    }
+
+    @Test
+    void guardarGenerada_inventario_insertaIdInventario() throws Exception {
+        when(sentencia.executeUpdate()).thenReturn(1);
+
+        repositorio.guardarGenerada(conexion, null, null, null, 4,
+                "EQUIPO_REVISION", "PC-01", "Equipo en revisión", "Detalle", "Alta");
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(conexion).prepareStatement(sql.capture());
+        assertAll(
+                () -> assertTrue(sql.getValue().contains("id_inventario")),
+                () -> verify(sentencia).setNull(1, Types.INTEGER),
+                () -> verify(sentencia).setNull(2, Types.INTEGER),
+                () -> verify(sentencia).setNull(3, Types.INTEGER),
+                () -> verify(sentencia).setInt(4, 4),
+                () -> verify(sentencia).setString(5, "EQUIPO_REVISION"),
+                () -> verify(sentencia).setString(6, "PC-01"));
+    }
+
+    @Test
+    void guardarGenerada_tipoDescriptivoNoDeterminaElOrigen() throws Exception {
+        when(sentencia.executeUpdate()).thenReturn(1);
+
+        repositorio.guardarGenerada(conexion, 15, null, null, null,
+                "Reserva pendiente", "Reserva #15", "Título", "Detalle", "Media");
+
+        assertAll(
+                () -> verify(sentencia).setInt(1, 15),
+                () -> verify(sentencia).setString(5, "Reserva pendiente"),
+                () -> verify(sentencia).setString(6, "Reserva #15"));
+    }
+
+    @Test
+    void guardarGenerada_exigeExactamenteUnOrigen() {
+        assertAll(
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> repositorio.guardarGenerada(conexion, null, null, null, null,
+                                "TIPO", "1", "Título", "Detalle", "Media")),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> repositorio.guardarGenerada(conexion, 1, null, 2, null,
+                                "TIPO", "1", "Título", "Detalle", "Media")));
+    }
+
+    @Test
+    void guardarGenerada_refrescosSucesivosUsanUpsertSinDuplicar() throws Exception {
+        when(sentencia.executeUpdate()).thenReturn(1);
+
+        repositorio.guardarGenerada(conexion, null, null, 9, null,
+                "MANTENIMIENTO_PREVENTIVO", "9", "Título", "Detalle", "Media");
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(conexion).prepareStatement(sql.capture());
+        assertTrue(sql.getValue().contains("ON DUPLICATE KEY UPDATE"));
+    }
+
+    @Test
+    void eliminarAlertasSinOrigenActivo_eliminaAlertaPreventivaIncorrecta() throws Exception {
+        when(sentencia.executeUpdate()).thenReturn(1);
+
+        repositorio.eliminarAlertasSinOrigenActivo(conexion);
+
+        ArgumentCaptor<String> consultas = ArgumentCaptor.forClass(String.class);
+        verify(conexion, atLeastOnce()).prepareStatement(consultas.capture());
+        String limpiezaPreventiva = consultas.getAllValues().stream()
+                .filter(sql -> sql.contains("a.tipo='MANTENIMIENTO_REQUERIDO'"))
+                .findFirst().orElseThrow();
+        assertAll(
+                () -> assertTrue(limpiezaPreventiva.contains("AND NOT EXISTS")),
+                () -> assertTrue(limpiezaPreventiva.contains(
+                        RepositorioAlertas.condicionAntiguedadMantenimiento("180"))),
+                () -> assertFalse(limpiezaPreventiva.contains("i.ultimo_mantenimiento IS NULL OR")));
     }
 }

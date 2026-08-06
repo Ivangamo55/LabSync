@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Manual técnico de LabSync</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body class="documento">
+<section class="portada">
+  <div>
+    <img class="logo" width="200" height="200" src="../LabSync/src/main/resources/images/labsync_200.png" alt="Logotipo LabSync">
+    <h1>Manual técnico</h1>
+    <p class="subtitulo">LabSync 1.0 · Arquitectura, instalación, base de datos, pruebas y soporte</p>
+  </div>
+  <div class="meta">
+    <p><strong>Proyecto:</strong> Maven multimódulo · Java Swing · JDBC · MySQL/MariaDB.</p>
+    <p><strong>Punto de entrada:</strong> <code>labsync.aplicacion.AplicacionLabSync</code>.</p>
+    <p><strong>Versión documental:</strong> 1.0 · <strong>Fecha:</strong> 5 de agosto de 2026.</p>
+    <p><strong>Audiencia:</strong> desarrollo, QA, soporte, administración de base de datos y despliegue.</p>
+  </div>
+</section>
+
+<h1 class="pagina">Control y lectura del documento</h1>
+<table>
+  <tr><th>Aspecto</th><th>Detalle</th></tr>
+  <tr><td>Fuente de verdad funcional</td><td>Código actual del módulo <code>LabSync</code>, DDL <code>labsync_db/labsync_db.sql</code>, pruebas JUnit y POM vigentes.</td></tr>
+  <tr><td>Objetivo</td><td>Reproducir construcción, instalación, diagnóstico y pruebas; explicar decisiones y puntos de extensión.</td></tr>
+  <tr><td>Estado verificado</td><td><code>clean verify</code> exitoso con 102 pruebas: 0 fallas, 0 errores, 0 omitidas; JAR sombreado generado.</td></tr>
+  <tr><td>Evidencia visual</td><td>17 capturas renderizadas desde las ventanas Swing reales contra una copia temporal del esquema.</td></tr>
+  <tr><td>Precaución</td><td>Los scripts de instalación y migración deben ejecutarse con respaldo y en el esquema correcto.</td></tr>
+</table>
+
+<h2>Contenido</h2>
+<div class="toc"><ol>
+  <li>Ficha técnica y estructura</li>
+  <li>Construcción y ejecución</li>
+  <li>Configuración y base de datos</li>
+  <li>Arquitectura del código</li>
+  <li>Flujos y reglas transaccionales</li>
+  <li>Modelo de datos</li>
+  <li>Interfaz, sesión y concurrencia</li>
+  <li>Pruebas automatizadas</li>
+  <li>Pruebas de integración y aceptación</li>
+  <li>Empaquetado y despliegue</li>
+  <li>Operación, respaldo y migraciones</li>
+  <li>Seguridad y deuda técnica</li>
+  <li>Diagnóstico y solución de problemas</li>
+  <li>Checklist de liberación</li>
+</ol></div>
+
+<h1 class="pagina">1. Ficha técnica y estructura</h1>
+<div class="kpi"><strong>Java 17+</strong>nivel objetivo del compilador</div>
+<div class="kpi"><strong>61</strong>archivos Java principales</div>
+<div class="kpi"><strong>102</strong>pruebas automatizadas vigentes</div>
+<div class="kpi"><strong>14</strong>tablas del esquema nuevo</div>
+<div class="kpi"><strong>7 s</strong>intervalo de actualización dinámica</div>
+<div class="kpi"><strong>1 JAR</strong>ejecutable con dependencias</div>
+
+<table>
+  <tr><th>Componente</th><th>Tecnología/versión</th><th>Responsabilidad</th></tr>
+  <tr><td>UI</td><td>Java Swing, formularios NetBeans, Nimbus</td><td>Ventanas por rol, filtros, tablas, diálogos y navegación.</td></tr>
+  <tr><td>Runtime</td><td>JDK 17 o posterior</td><td>Compilación y ejecución; se requiere JDK completo, no solo JRE/headless.</td></tr>
+  <tr><td>Construcción</td><td>Maven Wrapper 3.9.11</td><td>Reactor multimódulo, pruebas, cobertura, JAR.</td></tr>
+  <tr><td>Datos</td><td>JDBC + MySQL Connector/J 8.3.0</td><td>Conexiones, consultas preparadas y transacciones.</td></tr>
+  <tr><td>Calendario</td><td>JCalendar 1.4</td><td>Selectores de fecha.</td></tr>
+  <tr><td>Exportación</td><td>Apache POI 5.5.1</td><td>Archivos Excel XLSX.</td></tr>
+  <tr><td>Pruebas</td><td>JUnit Jupiter 5.11.4, Mockito 5.15.2</td><td>Servicios, persistencia y utilidades de interfaz.</td></tr>
+  <tr><td>Cobertura</td><td>JaCoCo 0.8.13</td><td>Reporte HTML/XML durante <code>verify</code>.</td></tr>
+</table>
+
+<h2>1.1 Reactor y rutas clave</h2>
+<div class="diagrama">LabSync/                         ← raíz del repositorio y POM padre
+├── pom.xml                      ← packaging pom; módulo LabSync
+├── mvnw / mvnw.cmd              ← entrada obligatoria de Maven Wrapper
+├── LabSync/
+│   ├── pom.xml                  ← JAR 1.0 y dependencias
+│   ├── src/main/java/labsync/   ← 61 fuentes principales
+│   ├── src/main/resources/      ← imágenes empaquetadas
+│   ├── src/test/                ← 10 clases de prueba
+│   └── target/LabSync-1.0.jar   ← artefacto ejecutable
+├── labsync_db/labsync_db.sql    ← instalación completa, 14 tablas y datos demo
+├── docs/                        ← arquitectura, código y diccionario
+└── manuales/                    ← manuales PDF/HTML y capturas</div>
+
+<h1 class="pagina">2. Construcción y ejecución</h1>
+<h2>2.1 Prerrequisitos</h2>
+<ul class="checklist">
+  <li>JDK completo 17 o superior: <code>java</code> y <code>javac</code> deben existir.</li>
+  <li>Conectividad a Maven Central en la primera compilación.</li>
+  <li>MySQL/MariaDB solo para pruebas de integración o ejecución funcional.</li>
+  <li>Servidor gráfico para abrir Swing. En CI sin pantalla, no arrancar el JAR.</li>
+</ul>
+<pre>java -version
+javac -version
+./mvnw -version</pre>
+<div class="callout warning"><strong>Diagnóstico importante:</strong> algunas distribuciones instalan un paquete Java <em>headless</em> que incluye <code>java</code> y el módulo del compilador, pero omite <code>javac</code>, <code>ct.sym</code> o <code>libawt_xawt</code>. En ese caso Maven puede informar “release version 17 not supported” y Swing “HeadlessException”. Instale el paquete JDK/devel completo y el soporte gráfico.</div>
+
+<h2>2.2 Construcción reproducible</h2>
+<p>Desde la raíz, nunca presuponga Maven global:</p>
+<pre># Linux/macOS
+./mvnw clean verify
+
+# Windows PowerShell/CMD
+.\mvnw.cmd clean verify</pre>
+<p>El POM padre llama al módulo. La fase <code>verify</code> compila con <code>maven.compiler.release=17</code>, ejecuta Surefire/JUnit, crea el JAR, lo sombrea con dependencias y genera JaCoCo.</p>
+<table>
+  <tr><th>Salida</th><th>Ruta</th><th>Verificación</th></tr>
+  <tr><td>JAR ejecutable</td><td><code>LabSync/target/LabSync-1.0.jar</code></td><td>Manifest contiene <code>Main-Class: labsync.aplicacion.AplicacionLabSync</code>.</td></tr>
+  <tr><td>Resultados JUnit</td><td><code>LabSync/target/surefire-reports/</code></td><td>XML/TXT por clase.</td></tr>
+  <tr><td>Cobertura</td><td><code>LabSync/target/site/jacoco/index.html</code></td><td>Abrir en navegador después de <code>verify</code>.</td></tr>
+</table>
+
+<h2>2.3 Ejecución</h2>
+<pre># Linux/macOS
+java -jar ./LabSync/target/LabSync-1.0.jar
+
+# Windows
+java -jar .\LabSync\target\LabSync-1.0.jar</pre>
+<p>También puede usarse <code>Ejecutar-LabSync.cmd</code>. <code>AplicacionLabSync.main</code> delega en <code>SwingUtilities.invokeLater</code>, construye <code>VentanaInicioSesion</code>, la centra y muestra en el Event Dispatch Thread.</p>
+<figure class="login"><img src="capturas/01-inicio-sesion.png" alt="Punto de entrada de LabSync"><figcaption>Resultado visual esperado del punto de entrada.</figcaption></figure>
+
+<h1 class="pagina">3. Configuración y base de datos</h1>
+<h2>3.1 Precedencia de configuración JDBC</h2>
+<p><code>ConexionBaseDatos</code> resuelve cada valor en este orden: variable de entorno, propiedad Java y predeterminado.</p>
+<table>
+  <tr><th>Variable</th><th>Propiedad <code>-D</code></th><th>Predeterminado</th></tr>
+  <tr><td><code>LABSYNC_DB_URL</code></td><td><code>labsync.db.url</code></td><td><code>jdbc:mysql://localhost:3306/labsync_db</code></td></tr>
+  <tr><td><code>LABSYNC_DB_USER</code></td><td><code>labsync.db.user</code></td><td><code>root</code></td></tr>
+  <tr><td><code>LABSYNC_DB_PASSWORD</code></td><td><code>labsync.db.password</code></td><td>cadena vacía</td></tr>
+</table>
+<pre># Ejemplo Linux/macOS
+export LABSYNC_DB_URL='jdbc:mysql://db-pruebas:3306/labsync_qa'
+export LABSYNC_DB_USER='labsync_app'
+export LABSYNC_DB_PASSWORD='secreto-administrado-externamente'
+java -jar LabSync/target/LabSync-1.0.jar
+
+# Alternativa con propiedades Java
+java -Dlabsync.db.url='jdbc:mysql://localhost:3306/labsync_qa' \
+     -Dlabsync.db.user='labsync_app' \
+     -Dlabsync.db.password='...' \
+     -jar LabSync/target/LabSync-1.0.jar</pre>
+<div class="callout danger"><strong>No use los predeterminados en producción.</strong> Cree un usuario de aplicación con privilegios mínimos; mantenga secretos fuera del repositorio y del historial de comandos.</div>
+
+<h2>3.2 Instalación nueva</h2>
+<ol>
+  <li>Respalde cualquier esquema homónimo.</li>
+  <li>Inicie MySQL/MariaDB en el host configurado.</li>
+  <li>Importe una sola vez <code>labsync_db/labsync_db.sql</code>. El archivo crea/selecciona <code>labsync_db</code> y define el esquema completo.</li>
+  <li>Cree datos maestros y cuentas de prueba; el DDL no incluye datos iniciales.</li>
+  <li>Valide exactamente 14 tablas.</li>
+</ol>
+<pre>mysql -u root -p &lt; labsync_db/labsync_db.sql
+mysql -u root -p -D labsync_db -e "SHOW TABLES;"</pre>
+<p>Para un nombre de esquema distinto, prepare una copia revisada del DDL y ajuste tanto <code>CREATE DATABASE</code>/<code>USE</code> como la URL JDBC. No haga reemplazos a ciegas en producción.</p>
+
+<h2>3.3 Migraciones</h2>
+<table>
+  <tr><th>Origen</th><th>Script</th><th>Resultado</th></tr>
+  <tr><td>Instalación completa</td><td><code>labsync_db/labsync_db.sql</code></td><td>Única fuente SQL: crea directamente 14 tablas y los datos ficticios mínimos.</td></tr>
+</table>
+<p>Procedimiento: respaldo consistente → ensayo en copia → importar <code>labsync_db/labsync_db.sql</code> → revisar conteos, restricciones y triggers → ejecutar pruebas de humo → documentar versión. El archivo recrea las tablas, por lo que no debe importarse sobre datos que no estén respaldados.</p>
+
+<h1 class="pagina">4. Arquitectura del código</h1>
+<div class="diagrama">Usuario
+  │ eventos Swing
+  ▼
+interfaz/*  ─────► interfaz/comun (navegación, alertas, actualización)
+  │                       │
+  ├──────────────► servicio/* (reglas compartidas y transacciones)
+  │                       │
+  └──────────────► persistencia/* (consultas y repositorio de alertas)
+                          │
+                          ▼
+                 ConexionBaseDatos ──JDBC──► MySQL/MariaDB</div>
+
+<h2>4.1 Paquetes</h2>
+<table>
+  <tr><th>Paquete</th><th>Responsabilidad y clases representativas</th></tr>
+  <tr><td><code>labsync.aplicacion</code></td><td>Punto de entrada <code>AplicacionLabSync</code>.</td></tr>
+  <tr><td><code>labsync.configuracion</code></td><td><code>ConexionBaseDatos</code>, resolución de URL/credenciales y apertura JDBC.</td></tr>
+  <tr><td><code>labsync.modelo</code></td><td>Objetos/records de transferencia: <code>SesionUsuario</code>, <code>Alerta</code>, <code>HorarioClase</code>, <code>SoftwareLaboratorio</code>, catálogos.</td></tr>
+  <tr><td><code>labsync.persistencia</code></td><td><code>ConsultaTabla</code>, <code>ConsultaEscalar</code>, <code>CatalogoLaboratorios</code>, <code>RepositorioAlertas</code>.</td></tr>
+  <tr><td><code>labsync.servicio</code></td><td>Disponibilidad, horarios, mantenimiento, alertas y software.</td></tr>
+  <tr><td><code>labsync.interfaz.autenticacion</code></td><td>Acceso, SHA-256 heredado, alta transaccional de usuario/perfil.</td></tr>
+  <tr><td><code>labsync.interfaz.panel</code></td><td>Dashboards por rol.</td></tr>
+  <tr><td><code>labsync.interfaz.reservas</code></td><td>Solicitud individual/grupal, historial del profesor y resolución.</td></tr>
+  <tr><td><code>labsync.interfaz.bitacora</code></td><td>Registro del profesor y consulta/exportación general.</td></tr>
+  <tr><td><code>labsync.interfaz.inventario</code></td><td>Equipos y panel de software por laboratorio.</td></tr>
+  <tr><td><code>labsync.interfaz.fallas</code></td><td>Alta por usuario y atención administrativa.</td></tr>
+  <tr><td><code>labsync.interfaz.mantenimiento</code></td><td>Programación, estado, selección de filas y exportación.</td></tr>
+  <tr><td><code>labsync.interfaz.horarios</code></td><td>Ciclos y asignaciones regulares.</td></tr>
+  <tr><td><code>labsync.interfaz.comun</code></td><td>Actualización en segundo plano, modelos, navegación, recursos, validación de fechas, alertas y sonidos.</td></tr>
+</table>
+
+<h2>4.2 Reglas de mantenimiento del GUI</h2>
+<ul>
+  <li>Los archivos <code>.form</code> pertenecen al diseñador NetBeans. No edite manualmente bloques <code>initComponents</code> marcados como generados.</li>
+  <li>Las consultas lentas no deben ejecutarse en el Event Dispatch Thread. <code>ActualizacionAutomatica</code> usa trabajo en segundo plano y aplica el resultado en Swing.</li>
+  <li>Toda mutación visual debe volver al EDT.</li>
+  <li>Los recursos se cargan desde classpath mediante <code>Recursos</code>; no dependa del directorio actual.</li>
+  <li>La navegación preserva <code>SesionUsuario</code> y dispone la ventana anterior.</li>
+</ul>
+
+<h1 class="pagina">5. Flujos y reglas transaccionales</h1>
+<h2>5.1 Autenticación</h2>
+<div class="flujo"><span>correo + contraseña</span><b>→</b><span>SHA-256 hexadecimal</span><b>→</b><span>SELECT usuario</span><b>→</b><span>SesionUsuario</span><b>→</b><span>panel por rol</span></div>
+<p><code>SesionUsuario</code> lleva identificador, nombre corto, nombre completo y rol. El ID es esencial para asociar reservas, bitácora y resoluciones al usuario real; no sustituirlo por texto visible.</p>
+
+<h2>5.2 Registro</h2>
+<ol>
+  <li>Validación de campos, rol y dominio institucional.</li>
+  <li>Captura adicional por rol.</li>
+  <li><code>setAutoCommit(false)</code>.</li>
+  <li>INSERT en <code>usuario</code> y lectura de clave generada.</li>
+  <li>INSERT opcional en <code>estudiante</code>, <code>laboratorista</code> o <code>externo</code>.</li>
+  <li><code>commit</code>; ante cualquier excepción, <code>rollback</code>.</li>
+</ol>
+
+<h2>5.3 Disponibilidad y aprobación</h2>
+<div class="diagrama">consultar(laboratorio, fecha, intervalo, rol)
+├─ ¿laboratorio Disponible y capacidad &gt; 0?
+├─ ¿mantenimiento Pendiente/En proceso cuya fecha ya aplica?
+├─ ¿reporte de falla En revisión?
+├─ ¿clase regular activa en ciclo/día con traslape?
+├─ ¿reserva activa de profesor?
+├─ profesor: ¿hay reservas individuales activas?
+└─ estudiante: capacidad = total_equipos − alumnos activos
+     └─ disponible si capacidad restante &gt; 0</div>
+<p>Los estados activos para ocupación son Pendiente y Aprobada. El traslape usa la condición de intervalos <code>inicioA &lt; finB AND finA &gt; inicioB</code>. La aprobación reconsulta dentro de transacción y puede añadir <code>FOR UPDATE</code> para reducir carreras entre sesiones.</p>
+
+<h2>5.4 Horarios regulares</h2>
+<p><code>ServicioHorarios</code> valida carrera, cuatrimestre 1–11, grupo, turno, materia, módulos de hora y rango del turno. Busca conflictos por laboratorio, profesor o identidad del grupo dentro del ciclo/día. Los triggers repiten integridad crítica en la base.</p>
+<table class="compact">
+  <tr><th>Turno</th><th>Ventana</th><th>Inicios/finales</th></tr>
+  <tr><td>Matutino</td><td>07:00–14:10</td><td>Módulos institucionales de 50 min, con los bloques definidos en el servicio.</td></tr>
+  <tr><td>Vespertino</td><td>15:00–21:20</td><td>Módulos institucionales de 50 min.</td></tr>
+</table>
+
+<h2>5.5 Mantenimiento e inventario</h2>
+<p><code>ServicioMantenimiento</code> valida el equipo, tipo, fecha, responsable, estado y observaciones especiales; impide conflictos con reservas cuando corresponda; inserta/actualiza en transacción y sincroniza el estado de inventario.</p>
+<table>
+  <tr><th>Transición</th><th>Efecto de inventario</th></tr>
+  <tr><td>Pendiente o En proceso</td><td>Equipo En mantenimiento.</td></tr>
+  <tr><td>Realizado: preventivo/correctivo/actualización</td><td>Disponible y <code>ultimo_mantenimiento</code> actualizado.</td></tr>
+  <tr><td>Realizado: disposición peligrosa/retiro obsoleto</td><td>Baja, sin borrar historial; observaciones obligatorias.</td></tr>
+  <tr><td>Cancelado</td><td>Finaliza la programación; el servicio recalcula el estado aplicable.</td></tr>
+</table>
+
+<h2>5.6 Alertas</h2>
+<p><code>ServicioAlertas</code> sincroniza avisos idempotentes respaldados por la clave única tipo + referencia y un único origen relacional. Genera alertas para mantenimiento próximo/vencido, preventivo requerido, fallas, equipos con fallas, reservas pendientes y resoluciones.</p>
+<p>Los controles de campana y el diálogo actualizan aproximadamente cada 7 segundos. La operación que cambia una alerta debe conservar el origen y actualizar fechas de lectura/atención.</p>
+
+<h1 class="pagina">6. Modelo de datos</h1>
+<div class="diagrama">USUARIO ──┬── ESTUDIANTE
+          ├── LABORATORISTA
+          ├── EXTERNO
+          ├── HORARIOS_CLASE ── CICLOS_ESCOLARES
+          ├── RESERVAS ───────── LABORATORIOS
+          ├── BITACORA ───────── HORARIOS_CLASE / RESERVAS
+          └── REPORTE_FALLAS ─── INVENTARIO
+
+LABORATORIOS ──┬── INVENTARIO ── MANTENIMIENTO
+               ├── SOFTWARE_LABORATORIO
+               ├── HORARIOS_CLASE
+               └── RESERVAS
+
+ALERTAS ── exactamente un origen:
+           RESERVA | FALLA | MANTENIMIENTO | INVENTARIO</div>
+
+<h2>6.1 Inventario de tablas</h2>
+<table class="compact">
+  <tr><th>Tabla</th><th>Clave</th><th>Función/relación crítica</th></tr>
+  <tr><td><code>usuario</code></td><td><code>id</code>, correo UK</td><td>Identidad, rol y hash heredado.</td></tr>
+  <tr><td><code>estudiante</code></td><td><code>id_usuario</code></td><td>Perfil 1:1; matrícula UK, carrera, turno.</td></tr>
+  <tr><td><code>laboratorista</code></td><td><code>id_usuario</code></td><td>Perfil 1:1; turno y pisos.</td></tr>
+  <tr><td><code>externo</code></td><td><code>id_usuario</code></td><td>Perfil 1:1; institución y motivo.</td></tr>
+  <tr><td><code>laboratorios</code></td><td><code>id_laboratorio</code>, nombre UK</td><td>Capacidad de equipos/personas y estado.</td></tr>
+  <tr><td><code>ciclos_escolares</code></td><td><code>id_ciclo</code>, nombre UK</td><td>Vigencia de horarios.</td></tr>
+  <tr><td><code>horarios_clase</code></td><td><code>id_horario</code></td><td>Asignación regular; integridad de rol/traslape.</td></tr>
+  <tr><td><code>reservas</code></td><td><code>id_reserva</code></td><td>Solicitud extraordinaria y estados.</td></tr>
+  <tr><td><code>bitacora</code></td><td><code>id_bitacora</code></td><td>Fotografía histórica; referencias opcionales.</td></tr>
+  <tr><td><code>inventario</code></td><td><code>id_inventario</code>, código/serie UK</td><td>Equipo, condición y último mantenimiento.</td></tr>
+  <tr><td><code>software_laboratorio</code></td><td><code>id_software</code>, laboratorio+nombre UK</td><td>Versiones, uso y acciones pendientes.</td></tr>
+  <tr><td><code>reporte_fallas</code></td><td><code>id_falla</code></td><td>Falla, prioridad, seguimiento y equipo opcional.</td></tr>
+  <tr><td><code>mantenimiento</code></td><td><code>id_mantenimiento</code></td><td>Intervención de inventario y falla opcional.</td></tr>
+  <tr><td><code>alertas</code></td><td><code>id_alerta</code>, tipo+referencia UK</td><td>Aviso persistente con un origen exacto.</td></tr>
+</table>
+<p>El detalle campo por campo está en <code>docs/DICCIONARIO_DATOS.md</code>. El DDL usa InnoDB, claves foráneas, índices, CHECK y triggers para reforzar invariantes.</p>
+
+<h2>6.2 Reglas de integridad a preservar</h2>
+<ul>
+  <li>Correos, nombres de laboratorio, matrícula, código/serie y nombres de ciclo no se repiten según sus claves únicas.</li>
+  <li>Capacidades y totales de usuarios son positivos.</li>
+  <li>Fecha final del ciclo no precede al inicio; hora final es posterior a inicio.</li>
+  <li>El profesor de <code>horarios_clase</code> debe tener rol Profesor.</li>
+  <li>La fotografía de laboratorio en bitácora/falla debe coincidir con su FK cuando aplica.</li>
+  <li>Una alerta tiene exactamente una FK de origen no nula.</li>
+  <li>No elimine físicamente equipos/software que requieran historial: use Baja/Eliminado.</li>
+</ul>
+
+<h1 class="pagina">7. Interfaz, sesión y concurrencia</h1>
+<figure><img src="capturas/11-panel-laboratorista.png" alt="Panel administrativo"><figcaption>El panel administrativo evidencia navegación, sesión, campana y lecturas periódicas.</figcaption></figure>
+<h2>7.1 Ciclo de vida de ventana</h2>
+<p>Los constructores reciben preferentemente <code>SesionUsuario</code>. Existen sobrecargas con nombre por compatibilidad, pero el camino nuevo debe conservar el objeto de sesión. Al navegar se crea la siguiente ventana, se centra/muestra y se dispone la anterior. Los temporizadores se detienen al cerrar para evitar fugas.</p>
+
+<h2>7.2 Actualización automática</h2>
+<p><code>ActualizacionAutomatica&lt;T&gt;</code> recibe ventana, intervalo, proveedor de datos y consumidor visual. Un <code>Timer</code> inicia lecturas y el resultado se aplica sin bloquear Swing. Varias pantallas usan 7000 ms: dashboards, reservas, fallas, inventario/software, mantenimiento, horarios, bitácora y alertas.</p>
+<ul>
+  <li>No cambie el modelo de una tabla si la selección/edición activa se perderá sin restauración.</li>
+  <li>Use <code>ActualizadorModeloTabla</code> para conservar selección y evitar parpadeo cuando el contenido no cambió.</li>
+  <li>Los fallos de refresco deben registrarse y presentar un estado controlado, no cerrar la ventana.</li>
+</ul>
+
+<h2>7.3 Exportación</h2>
+<p>Las ventanas administrativas crean libros XLSX con Apache POI, título, encabezados, filas visibles, formato y autofiltro. Los nombres predeterminados son específicos del módulo. Cierre streams/workbooks con try-with-resources y no ejecute escritura pesada en EDT si el volumen crece.</p>
+
+<h1 class="pagina">8. Pruebas automatizadas</h1>
+<h2>8.1 Inventario actual</h2>
+<table class="compact">
+  <tr><th>Clase</th><th>Pruebas</th><th>Área</th></tr>
+  <tr><td><code>ActualizadorModeloTablaTest</code></td><td>4</td><td>Actualización y selección de tablas.</td></tr>
+  <tr><td><code>ModeloAlertasTest</code></td><td>5</td><td>Modelo visual de alertas.</td></tr>
+  <tr><td><code>NavegacionLaboratoristaTest</code></td><td>2</td><td>Rutas del menú.</td></tr>
+  <tr><td><code>SeleccionMantenimientoTablaTest</code></td><td>2</td><td>Selección y datos de mantenimiento.</td></tr>
+  <tr><td><code>RepositorioAlertasTest</code></td><td>17</td><td>SQL y estados de alertas.</td></tr>
+  <tr><td><code>ServicioAlertasTest</code></td><td>13</td><td>Clasificación y mantenimiento requerido.</td></tr>
+  <tr><td><code>ServicioDisponibilidadTest</code></td><td>10</td><td>Capacidad, bloqueos, traslapes y aprobación.</td></tr>
+  <tr><td><code>ServicioHorariosTest</code></td><td>13</td><td>Validaciones, conflictos y persistencia.</td></tr>
+  <tr><td><code>ServicioMantenimientoTest</code></td><td>18</td><td>Tipos, transacciones y efectos de inventario.</td></tr>
+  <tr><td><code>ServicioSoftwareLaboratorioTest</code></td><td>8</td><td>Validación, alta, filtros y estados.</td></tr>
+  <tr><th>Total</th><th>92</th><th>0 fallas, 0 errores, 0 omitidas en la verificación documentada.</th></tr>
+</table>
+
+<h2>8.2 Cobertura</h2>
+<p>El reporte global de la ejecución documentada cubrió 579 de 11,377 líneas (~5.1%) y 282 de 2,177 ramas (~13.0%). El valor global es bajo porque las ventanas Swing generadas son extensas y no están automatizadas en su mayoría; no debe interpretarse como cobertura suficiente del producto. Los servicios críticos tienen concentración mayor.</p>
+<div class="callout warning"><strong>Criterio de salida:</strong> 102 pruebas verdes son necesarias pero no reemplazan los casos funcionales con MySQL/MariaDB, concurrencia, interfaz, exportación y permisos.</div>
+
+<h2>8.3 Ejecuciones útiles</h2>
+<pre># Suite completa y cobertura
+./mvnw clean verify
+
+# Una clase
+./mvnw -pl LabSync -Dtest=ServicioDisponibilidadTest test
+
+# Un método (sintaxis Surefire)
+./mvnw -pl LabSync -Dtest=ServicioHorariosTest#nombreDelMetodo test</pre>
+<p>Mockito informa que el auto-attach del mock maker será restringido por futuras versiones de JDK. Trátelo como advertencia de mantenimiento: configure el agente de Mockito cuando se actualice el runtime, sin ocultar indiscriminadamente advertencias.</p>
+
+<h1 class="pagina">9. Pruebas de integración y aceptación</h1>
+<h2>9.1 Base aislada</h2>
+<p>Use un esquema desechable. Una estrategia segura es restaurar un respaldo anonimizado bajo otro nombre, aplicar migraciones y configurar <code>LABSYNC_DB_URL</code> a ese esquema. Nunca reutilice producción para casos de transición.</p>
+<pre>CREATE DATABASE labsync_qa CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- importar estructura/datos anonimizados
+-- apuntar jdbc:mysql://localhost:3306/labsync_qa</pre>
+
+<h2>9.2 Datos mínimos</h2>
+<table>
+  <tr><th>Dato</th><th>Mínimo recomendado</th></tr>
+  <tr><td>Usuarios</td><td>1 por rol funcional; 2 laboratoristas para concurrencia.</td></tr>
+  <tr><td>Laboratorios</td><td>2 Disponibles con capacidades distintas; 1 No disponible.</td></tr>
+  <tr><td>Ciclos/horarios</td><td>1 ciclo activo, 1 profesor, clases en ambos turnos y un hueco libre.</td></tr>
+  <tr><td>Reservas</td><td>Una por estado y casos traslapados/no traslapados.</td></tr>
+  <tr><td>Inventario</td><td>Disponible, Con falla, En mantenimiento y Baja.</td></tr>
+  <tr><td>Fallas/mantenimiento</td><td>Una por estado/tipo crítico.</td></tr>
+  <tr><td>Software</td><td>Uno por estado, con duplicado controlado.</td></tr>
+</table>
+
+<h2>9.3 SQL de comprobación</h2>
+<pre>-- Tablas y versión funcional
+SELECT COUNT(*) AS tablas
+FROM information_schema.tables
+WHERE table_schema = DATABASE();
+
+-- Reservas por estado
+SELECT estado, COUNT(*) FROM reservas GROUP BY estado;
+
+-- Doble ocupación potencial (inspección orientativa)
+SELECT a.id_reserva, b.id_reserva, a.id_laboratorio, a.fecha
+FROM reservas a JOIN reservas b
+  ON a.id_reserva &lt; b.id_reserva
+ AND a.id_laboratorio = b.id_laboratorio
+ AND a.fecha = b.fecha
+ AND a.hora_inicio &lt; b.hora_fin
+ AND a.hora_fin &gt; b.hora_inicio
+WHERE a.estado IN ('Pendiente','Aprobada')
+  AND b.estado IN ('Pendiente','Aprobada');
+
+-- Alertas con origen inválido: debe devolver 0
+SELECT COUNT(*) AS invalidas FROM alertas
+WHERE ((id_reserva IS NOT NULL) + (id_falla IS NOT NULL) +
+       (id_mantenimiento IS NOT NULL) + (id_inventario IS NOT NULL)) &lt;&gt; 1;</pre>
+<p>La consulta de traslapes es orientativa: reservas individuales compatibles pueden coexistir hasta capacidad. Cruce con rol/cantidad antes de reportar defecto.</p>
+
+<h2>9.4 Concurrencia crítica</h2>
+<ol>
+  <li>Abra dos sesiones de laboratorista sobre la misma base.</li>
+  <li>Seleccione la misma reserva Pendiente.</li>
+  <li>Intente aprobar en ambas casi simultáneamente.</li>
+  <li>Verifique un solo resultado coherente, sin pérdida de actualización ni doble ocupación.</li>
+  <li>Repita con dos reservas incompatibles consultadas como libres antes de aprobar.</li>
+</ol>
+
+<h2>9.5 Capturas de aceptación</h2>
+<figure><img src="capturas/12-gestion-reservas.png" alt="Reservas con datos"><figcaption>Gestión de reservas usada como evidencia de filtros, tabla y transiciones.</figcaption></figure>
+<figure><img src="capturas/14-inventario.png" alt="Inventario con datos"><figcaption>Inventario y pestaña de software cargados contra el esquema de 14 tablas.</figcaption></figure>
+<figure><img src="capturas/17-horarios.png" alt="Horarios con datos"><figcaption>Administración de asignaciones regulares y ciclos.</figcaption></figure>
+
+<h1 class="pagina">10. Empaquetado y despliegue</h1>
+<h2>10.1 JAR sombreado</h2>
+<p><code>maven-shade-plugin</code> reemplaza el artefacto principal e incluye dependencias. <code>maven-jar-plugin.forceCreation=true</code> evita volver a sombrear un JAR ya sombreado. El build puede advertir sobre <code>module-info.class</code>, licencias/manifestos duplicados y clases de módulo; revise tras actualizar dependencias.</p>
+<pre>jar tf LabSync/target/LabSync-1.0.jar | head
+unzip -p LabSync/target/LabSync-1.0.jar META-INF/MANIFEST.MF</pre>
+
+<h2>10.2 Paquete de entrega</h2>
+<ul class="checklist">
+  <li><code>LabSync-1.0.jar</code> con hash SHA-256 publicado.</li>
+  <li>Script de ejecución correspondiente al sistema.</li>
+  <li>Manual de usuario y manual técnico.</li>
+  <li>DDL/migración exacta de la versión.</li>
+  <li>Notas de versión y matriz de compatibilidad JDK/DB.</li>
+  <li>Procedimiento de respaldo y reversión.</li>
+  <li>Configuración externa de URL/credenciales.</li>
+</ul>
+
+<h2>10.3 Verificación posterior</h2>
+<ol>
+  <li>Comparar hash del JAR.</li>
+  <li>Verificar Java, red y esquema de 14 tablas.</li>
+  <li>Iniciar acceso en una estación con pantalla.</li>
+  <li>Ejecutar casos P0 de acceso, consulta, escritura reversible y exportación.</li>
+  <li>Revisar logs de Java y servidor SQL.</li>
+</ol>
+
+<h1 class="pagina">11. Operación, respaldo y migraciones</h1>
+<h2>11.1 Respaldo</h2>
+<pre>mysqldump --single-transaction --routines --triggers \
+  -u operador -p labsync_db &gt; /ruta/fuera-del-repositorio/respaldo.dump</pre>
+<p>Compruebe tamaño, restaure periódicamente en un servidor aislado y proteja el archivo porque contiene correos, nombres y hashes. Defina retención y cifrado según política institucional.</p>
+
+<h2>11.2 Monitoreo mínimo</h2>
+<ul>
+  <li>Disponibilidad y latencia del servidor SQL.</li>
+  <li>Crecimiento de bitácora, alertas, fallas y reservas.</li>
+  <li>Errores SQL del proceso Java y deadlocks.</li>
+  <li>Espacio para respaldos y exportaciones.</li>
+  <li>Desfase de reloj entre estaciones y servidor.</li>
+</ul>
+
+<h2>11.3 Reversión</h2>
+<p>El repositorio no ofrece una migración automática de reversa 14→13. Antes de migrar, conserve respaldo y binario anterior. Si la liberación falla, detenga escrituras, restaure el respaldo en un esquema nuevo, apunte el binario anterior a ese esquema y valide. No elimine únicamente <code>software_laboratorio</code> si la aplicación nueva sigue activa.</p>
+
+<h1 class="pagina">12. Seguridad y deuda técnica</h1>
+<table>
+  <tr><th>Hallazgo</th><th>Riesgo</th><th>Recomendación</th></tr>
+  <tr><td>Contraseñas con SHA-256 sin sal</td><td>Resistencia insuficiente ante robo de hashes.</td><td>Migrar gradualmente a Argon2id o bcrypt con sal individual y rehash al iniciar sesión.</td></tr>
+  <tr><td>Credenciales predeterminadas root/vacía</td><td>Privilegios excesivos y configuración insegura.</td><td>Usuario dedicado, privilegios mínimos y secreto externo.</td></tr>
+  <tr><td>JDBC directo sin pool</td><td>Conexiones repetidas y observabilidad limitada.</td><td>Evaluar datasource/pool y timeouts antes de escalar.</td></tr>
+  <tr><td>Lógica SQL aún presente en ventanas</td><td>Difícil prueba y acoplamiento UI/datos.</td><td>Mover gradualmente a servicios/repositorios transaccionales.</td></tr>
+  <tr><td>Cobertura GUI baja</td><td>Regresiones visuales o de navegación.</td><td>Pruebas de componentes/robot en entorno gráfico controlado y casos manuales versionados.</td></tr>
+  <tr><td>Rol Externo sin interfaz</td><td>Cuenta válida sin flujo útil.</td><td>Ocultar alta, bloquear acceso o implementar el panel según producto.</td></tr>
+  <tr><td>Mensajes SQL al usuario</td><td>Posible exposición de detalles internos.</td><td>Registrar detalle técnico y mostrar mensaje neutral/código de incidente.</td></tr>
+</table>
+<p>Las consultas observadas usan <code>PreparedStatement</code>, reduciendo inyección SQL. Mantenga esa práctica, valide identificadores dinámicos y nunca concatene entrada del usuario en SQL.</p>
+
+<h1 class="pagina">13. Diagnóstico y solución de problemas</h1>
+<table>
+  <tr><th>Error/síntoma</th><th>Diagnóstico</th><th>Resolución</th></tr>
+  <tr><td><code>release version 17 not supported</code></td><td>Runtime incompleto o <code>ct.sym</code> ausente; <code>java</code> no implica JDK completo.</td><td>Instalar JDK/devel; confirmar <code>javac --release 17 -version</code>.</td></tr>
+  <tr><td><code>HeadlessException</code></td><td>Sin DISPLAY/servidor gráfico o runtime headless.</td><td>No iniciar JAR en CI; en estación, instalar soporte AWT/X11 y usar sesión gráfica.</td></tr>
+  <tr><td><code>No hay conexión con la BD</code></td><td><code>ConexionBaseDatos.conectar()</code> devolvió null.</td><td>Revisar URL, DNS/puerto, servicio, usuario, contraseña y permisos.</td></tr>
+  <tr><td><code>Table '...software_laboratorio' doesn't exist</code></td><td>Instalación incompleta u obsoleta.</td><td>Respaldar e importar <code>labsync_db/labsync_db.sql</code>.</td></tr>
+  <tr><td>Error de clave duplicada</td><td>Correo, matrícula, código, serie, ciclo o software/lab repetido.</td><td>Consultar la fila existente; no eludir la restricción.</td></tr>
+  <tr><td>Reserva rechazada al aprobar</td><td>Cambio concurrente, clase, mantenimiento, falla o capacidad.</td><td>Es comportamiento esperado si la revalidación explica el bloqueo.</td></tr>
+  <tr><td>GUI congelada</td><td>I/O en EDT, diálogo modal oculto o servidor lento.</td><td>Tomar thread dump; buscar AWT-EventQueue y mover consulta a worker.</td></tr>
+  <tr><td>Modelo de tabla cambia selección</td><td>Refresco periódico reemplaza filas.</td><td>Usar utilidades de actualización/selección estable.</td></tr>
+  <tr><td>XLSX no se escribe</td><td>Permisos, archivo abierto o sin filas.</td><td>Probar ruta escribible, cerrar archivo y revisar excepción POI.</td></tr>
+</table>
+
+<h2>13.1 Recolección de evidencia</h2>
+<pre># Versiones y artefacto
+java -version
+./mvnw -version
+sha256sum LabSync/target/LabSync-1.0.jar
+
+# Proceso y conexión (adaptar al sistema)
+ps -ef | grep '[L]abSync-1.0.jar'
+mysql -h host -u usuario -p -D esquema -e 'SELECT 1;'
+
+# Thread dump si la GUI se congela
+jcmd PID Thread.print &gt; labsync-thread-dump.txt</pre>
+<p>Adjunte hora exacta, usuario/rol anonimizado, pantalla, acción, identificadores, mensaje completo, logs y consulta de verificación. No adjunte contraseñas ni volcados sin anonimizar.</p>
+
+<h1 class="pagina">14. Checklist de liberación</h1>
+<h2>Código y construcción</h2>
+<ul class="checklist">
+  <li>JDK completo 17+ confirmado.</li>
+  <li><code>./mvnw clean verify</code> exitoso desde raíz.</li>
+  <li>102 pruebas sin fallas, errores u omisiones inesperadas.</li>
+  <li>Reporte JaCoCo revisado; regresiones de servicios justificadas.</li>
+  <li>JAR ejecutable y manifest correctos.</li>
+  <li>Dependencias y advertencias Shade revisadas.</li>
+</ul>
+<h2>Datos</h2>
+<ul class="checklist">
+  <li>Respaldo restaurable disponible.</li>
+  <li>Esquema/migración ensayados y 14 tablas verificadas.</li>
+  <li>Triggers, constraints e índices presentes.</li>
+  <li>Usuario JDBC de privilegios mínimos probado.</li>
+  <li>Conteos y consultas de integridad sin anomalías.</li>
+</ul>
+<h2>Funcional</h2>
+<ul class="checklist">
+  <li>Login y navegación de Estudiante, Profesor y Laboratorista.</li>
+  <li>Reserva individual/grupal, revalidación y concurrencia.</li>
+  <li>Bitácora de clase/reserva sin duplicado.</li>
+  <li>Falla → revisión → mantenimiento → cierre.</li>
+  <li>Inventario, software, ciclos/horarios y alertas.</li>
+  <li>Cinco exportaciones XLSX abiertas y comparadas.</li>
+  <li>Cierre de sesión y temporizadores sin procesos residuales.</li>
+</ul>
+<h2>Entrega</h2>
+<ul class="checklist">
+  <li>Hash, notas, manuales y scripts incluidos.</li>
+  <li>Plan de reversión aprobado.</li>
+  <li>Secretos fuera del paquete.</li>
+  <li>Limitaciones (Externo, hash heredado, cobertura GUI) comunicadas.</li>
+</ul>
+
+<p class="pie">Manual técnico de LabSync 1.0 · Elaborado y verificado contra el repositorio vigente al 5 de agosto de 2026.</p>
+</body>
+</html>

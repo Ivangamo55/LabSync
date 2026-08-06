@@ -15,7 +15,7 @@ import labsync.interfaz.mantenimiento.VentanaGestionMantenimiento;
 import labsync.interfaz.fallas.VentanaGestionReportesFallas;
 import labsync.interfaz.reservas.VentanaGestionReservas;
 import labsync.interfaz.autenticacion.VentanaInicioSesion;
-import labsync.interfaz.horarios.VentanaGestionHorarios;
+import labsync.modelo.SesionUsuario;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -29,6 +29,7 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaPanelLaboratorista.class.getName());
     private String nombreUsuario;
+    private SesionUsuario sesion;
     private final ServicioAlertas alertaService = new ServicioAlertas();
     private javax.swing.JButton btnAlertas;
     private javax.swing.Timer temporizadorAlertas;
@@ -36,26 +37,72 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
     private boolean actualizandoAlertas;
     
     public VentanaPanelLaboratorista(String nombreRecibido) {
+        this(SesionUsuario.buscarLaboratorista(nombreRecibido));
+    }
+
+    public VentanaPanelLaboratorista(SesionUsuario sesionRecibida) {
         initComponents();
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(
+                this, sidebarVerde, headerBlanco, panelContenedor);
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarSidebar(sidebarVerde);
+        normalizarHeaderPanel();
+        normalizarContenidoPanel();
         inicializarAlertas();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
-        
-        this.nombreUsuario = nombreRecibido;
+
+        this.sesion = sesionRecibida == null
+                ? new SesionUsuario(0, "Usuario", "Usuario", "Laboratorista") : sesionRecibida;
+        this.nombreUsuario = this.sesion.getNombre();
         lbNombreUsuario.setText("Hola, " + nombreUsuario);
         
         cargarDashboard();
+        configurarTablasDashboard();
         agregarAccesoHorarios();
         iniciarActualizacionDashboard();
     }
 
     public VentanaPanelLaboratorista() {
-        initComponents();
-        inicializarAlertas();
-        setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
-        
-        cargarDashboard();
-        agregarAccesoHorarios();
-        iniciarActualizacionDashboard();
+        this(new SesionUsuario(0, "Usuario", "Usuario", "Laboratorista"));
+    }
+
+    /** Conserva sin cambios la distribución actual del dashboard. */
+    private void normalizarContenidoPanel() {
+        int margen = labsync.interfaz.comun.LayoutLaboratorista.CANONICAL_BODY_LEFT;
+        panelContenedor.setBackground(
+                labsync.interfaz.comun.LayoutLaboratorista.FONDO_CONTENIDO);
+        java.awt.Component[] componentes = {tarjeta1, tarjeta2, tarjeta3, lbBitacora,
+            panelTabla, lbUltimoMants, panelLabs};
+        for (java.awt.Component componente : componentes) panelContenedor.remove(componente);
+        panelContenedor.add(tarjeta1, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                margen, 20, 300, 140));
+        panelContenedor.add(tarjeta2, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                margen + 330, 20, 300, 140));
+        panelContenedor.add(tarjeta3, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                margen + 660, 20, 300, 140));
+        panelContenedor.add(lbBitacora, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                margen, 185, 300, 25));
+        panelContenedor.add(panelTabla, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                margen, 215, 1005, 130));
+        panelContenedor.add(lbUltimoMants, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                margen, 375, 300, 25));
+        panelContenedor.add(panelLabs, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                margen, 405, 1005, 130));
+    }
+
+    private void normalizarHeaderPanel() {
+        imgUTJ.setVisible(true);
+        imgUTJ.setIcon(new javax.swing.ImageIcon(getClass().getResource("/images/UTJ_color.png")));
+        headerBlanco.remove(imgUTJ);
+        headerBlanco.add(imgUTJ, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 25, -1, -1));
+        lbNombreUsuario.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 16));
+        lbNombreUsuario.setForeground(new java.awt.Color(8, 173, 141));
+        lbNombreUsuario.setHorizontalAlignment(javax.swing.SwingConstants.RIGHT);
+        headerBlanco.remove(lbNombreUsuario);
+        headerBlanco.add(lbNombreUsuario, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                675, 42, 170, 30));
+        headerBlanco.remove(btnCerrarSesion);
+        headerBlanco.add(btnCerrarSesion, new org.netbeans.lib.awtextra.AbsoluteConstraints(
+                870, 35, 130, 42));
     }
     
     private void cargarDashboard() {
@@ -69,13 +116,8 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
 
     /** Añade el módulo nuevo sin alterar el bloque generado por NetBeans. */
     private void agregarAccesoHorarios() {
-        javax.swing.JButton boton=new javax.swing.JButton("Ciclos y horarios");
-        boton.setBackground(java.awt.Color.WHITE); boton.setForeground(new java.awt.Color(6,140,115));
-        boton.setFont(new java.awt.Font("Arial",java.awt.Font.BOLD,14)); boton.setBorderPainted(false);
-        boton.setFocusPainted(false); boton.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
-        boton.addActionListener(e->new VentanaGestionHorarios().setVisible(true));
-        sidebarVerde.add(boton,new org.netbeans.lib.awtextra.AbsoluteConstraints(20,590,200,50));
-        sidebarVerde.revalidate(); sidebarVerde.repaint();
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebarVerde, () -> sesion);
     }
 
     /** Se agrega fuera del bloque generado para mantener VentanaPanelLaboratorista.form editable. */
@@ -90,7 +132,7 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
         btnAlertas.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         btnAlertas.addActionListener(e -> abrirAlertas());
         headerBlanco.add(btnAlertas,
-                new org.netbeans.lib.awtextra.AbsoluteConstraints(625, 36, 95, 42));
+                new org.netbeans.lib.awtextra.AbsoluteConstraints(575, 36, 90, 42));
         headerBlanco.setComponentZOrder(btnAlertas, 0);
         temporizadorAlertas = new javax.swing.Timer(7_000, e -> actualizarContadorAlertas(true));
         temporizadorAlertas.setInitialDelay(7_000);
@@ -116,7 +158,31 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
                     lbMantPendientes.setText(datos.mantenimientos());
                     tablaUltimosMants.setModel(datos.ultimosMantenimientos());
                     tablaBitacora.setModel(datos.ultimosBitacora());
+                    configurarColumnasDashboard();
                 });
+    }
+
+    private void configurarTablasDashboard() {
+        labsync.interfaz.comun.EstiloTablaLaboratorista.aplicar(tablaBitacora);
+        labsync.interfaz.comun.EstiloTablaLaboratorista.aplicar(tablaUltimosMants);
+        configurarColumnasDashboard();
+    }
+
+    private void configurarColumnasDashboard() {
+        tablaBitacora.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
+        int[] bitacora = {90, 180, 100, 120, 300, 170};
+        configurarAnchos(tablaBitacora, bitacora);
+        tablaUltimosMants.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
+        int[] mantenimientos = {105, 125, 145, 110, 185, 110, 170};
+        configurarAnchos(tablaUltimosMants, mantenimientos);
+    }
+
+    private static void configurarAnchos(javax.swing.JTable tabla, int[] anchos) {
+        for (int i = 0; i < anchos.length && i < tabla.getColumnCount(); i++) {
+            javax.swing.table.TableColumn columna = tabla.getColumnModel().getColumn(i);
+            columna.setPreferredWidth(anchos[i]);
+            columna.setMinWidth(Math.min(anchos[i], 70));
+        }
     }
 
     private DatosDashboard consultarDashboard() {
@@ -248,9 +314,7 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
         } else {
             ventana = new VentanaGestionInventario(nombreUsuario, alerta.referencia());
         }
-        ventana.setVisible(true);
-        ventana.setLocationRelativeTo(null);
-        dispose();
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventana);
     }
     
     private void cargarReservacionesHoy() {
@@ -842,43 +906,28 @@ public class VentanaPanelLaboratorista extends javax.swing.JFrame {
     }//GEN-LAST:event_btnCerrarSesionActionPerformed
 
     private void btnReservasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReservasActionPerformed
-        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(nombreUsuario);
-        
-        ventanaReserva.setVisible(true);
-        ventanaReserva.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReserva);
     }//GEN-LAST:event_btnReservasActionPerformed
 
     private void btnBitacoraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBitacoraActionPerformed
-        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(nombreUsuario);
-        
-        ventanaBitacora.setVisible(true);
-        ventanaBitacora.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaBitacora);
     }//GEN-LAST:event_btnBitacoraActionPerformed
 
     private void btnInventarioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInventarioActionPerformed
-        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(nombreUsuario);
-        
-        ventanaInventario.setVisible(true);
-        ventanaInventario.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaInventario);
     }//GEN-LAST:event_btnInventarioActionPerformed
 
     private void btnMantActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnMantActionPerformed
-        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(nombreUsuario);
-        
-        ventanaMant.setVisible(true);
-        ventanaMant.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaMant);
     }//GEN-LAST:event_btnMantActionPerformed
 
     private void btnReporteFallasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReporteFallasActionPerformed
-        VentanaGestionReportesFallas ventanaReporte = new VentanaGestionReportesFallas(nombreUsuario);
-        
-        ventanaReporte.setVisible(true);
-        ventanaReporte.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReportesFallas ventanaReporte = new VentanaGestionReportesFallas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReporte);
     }//GEN-LAST:event_btnReporteFallasActionPerformed
 
     public static void main(String args[]) {

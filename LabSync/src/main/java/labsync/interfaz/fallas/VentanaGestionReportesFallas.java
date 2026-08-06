@@ -10,6 +10,7 @@ import labsync.interfaz.inventario.VentanaGestionInventario;
 import labsync.interfaz.mantenimiento.VentanaGestionMantenimiento;
 import labsync.interfaz.reservas.VentanaGestionReservas;
 import labsync.interfaz.panel.VentanaPanelLaboratorista;
+import labsync.modelo.SesionUsuario;
 
 import java.awt.Color;
 import java.sql.SQLException;
@@ -39,17 +40,25 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaGestionReportesFallas.class.getName());
     String nombreUsuario;
+    private SesionUsuario sesion;
     private final Color COLOR_PLACEHOLDER = new Color(150, 150, 150);
     private final Color COLOR_TEXTO = new Color(51, 51, 51);
     private final String PH_BUSCAR = "Código, equipo, laboratorio o falla";
+    private volatile FiltrosReportes filtrosAplicados = FiltrosReportes.porDefecto();
 
     public VentanaGestionReportesFallas(String nombreRecibido) {
         initComponents();
+        this.nombreUsuario = nombreRecibido;
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(this, sidebar, header, body);
+        normalizarGeometriaOperativa();
+        configurarPresentacionTablaReportes();
         CatalogoLaboratorios.cargarTodos(cmbLaboratorio, "Todos");
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
-        this.nombreUsuario = nombreRecibido;
+        this.sesion = SesionUsuario.buscarLaboratorista(nombreRecibido);
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         
         txtDetalleDescripcion.setLineWrap(true);
         txtDetalleDescripcion.setWrapStyleWord(true);
@@ -67,7 +76,13 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
     public VentanaGestionReportesFallas() {
         initComponents();
         this.nombreUsuario = "Usuario";
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(this, sidebar, header, body);
+        normalizarGeometriaOperativa();
+        configurarPresentacionTablaReportes();
+        this.sesion = new SesionUsuario(0, "Usuario", "Usuario", "Laboratorista");
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         CatalogoLaboratorios.cargarTodos(cmbLaboratorio, "Todos");
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
@@ -84,12 +99,58 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
         iniciarActualizacionAutomatica();
     }
 
+    public VentanaGestionReportesFallas(SesionUsuario sesionRecibida) {
+        this(sesionRecibida == null ? "Usuario" : sesionRecibida.getNombre());
+        if (sesionRecibida != null) this.sesion = sesionRecibida;
+    }
+
     private void iniciarActualizacionAutomatica() {
-        new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT f.id_falla,DATE_FORMAT(f.fecha_reporte,'%Y-%m-%d %H:%i:%s') fecha_reporte,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,f.descripcion_falla,f.prioridad,f.estado,CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) reportado_por,IFNULL(f.observaciones,'') observaciones FROM reporte_fallas f LEFT JOIN usuario u ON u.id=f.id_usuario LEFT JOIN inventario i ON i.id_inventario=f.id_inventario JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio WHERE f.estado NOT IN ('Atendida','Cancelada') ORDER BY f.fecha_reporte DESC",
-                new String[]{"ID", "Fecha", "Código Equipo", "Nombre Equipo", "Laboratorio", "Falla", "Prioridad", "Estado", "Reportado Por", "Observaciones"},
-                new String[]{"id_falla", "fecha_reporte", "codigo_equipo", "nombre_equipo", "laboratorio", "descripcion_falla", "prioridad", "estado", "reportado_por", "observaciones"}),
-                modelo -> { tablaReportes.setModel(modelo); ocultarColumnaID(); });
+        new ActualizacionAutomatica<>(this, 7_000,
+                () -> {
+                    FiltrosReportes filtros = filtrosAplicados;
+                    return new ResultadoReportes(filtros, consultarReportes(filtros));
+                },
+                resultado -> {
+                    if (resultado.filtros().equals(filtrosAplicados)) {
+                        aplicarModeloReportes(resultado.modelo());
+                    }
+                });
+    }
+
+    private void aplicarModeloReportes(javax.swing.table.DefaultTableModel modelo) {
+        labsync.interfaz.comun.ActualizadorModeloTabla.aplicar(
+                tablaReportes, modelo, 0, this::configurarColumnasTablaReportes);
+    }
+
+    private void configurarPresentacionTablaReportes() {
+        labsync.interfaz.comun.EstiloTablaLaboratorista.aplicar(tablaReportes);
+        configurarColumnasTablaReportes();
+    }
+
+    private void normalizarGeometriaOperativa() {
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarSidebar(sidebar);
+        javax.swing.JPanel barraFiltros = labsync.interfaz.comun.LayoutLaboratorista.normalizarHeaderOperativo(
+                header, lbTitulo, txtBuscar,
+                new java.awt.Component[]{cmbLaboratorio, cmbEstado, cmbPrioridad},
+                new java.awt.Component[]{lbLaboratorio, lbEstado, lbPrioridad},
+                btnLimpiar, btnBuscar);
+        labsync.interfaz.comun.LayoutLaboratorista.restaurarHeaderIdentidad(
+                this, header, lbTitulo, nombreUsuario);
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarBodyOperativo(
+                body, jScrollPane1, barraFiltros,
+                java.util.List.of(btnVerDetalles, btnRevision, btnAtendida, btnCancelar),
+                btnExportar);
+    }
+
+    private void configurarColumnasTablaReportes() {
+        tablaReportes.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_OFF);
+        int[] anchos = {0, 105, 125, 145, 110, 210, 90, 115, 145, 220};
+        for (int i = 1; i < anchos.length && i < tablaReportes.getColumnCount(); i++) {
+            javax.swing.table.TableColumn columna = tablaReportes.getColumnModel().getColumn(i);
+            columna.setPreferredWidth(anchos[i]);
+            columna.setMinWidth(i == 5 || i == 9 ? 140 : Math.min(anchos[i], 75));
+        }
+        ocultarColumnaID();
     }
     
     private void ponerPlaceholderBuscar() {
@@ -127,73 +188,7 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
     }
 
     private void cargarTablaReportes() {
-        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel();
-        Connection con = ConexionBaseDatos.conectar();
-        
-        if (con == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return;
-        }
-        
-        modelo.addColumn("ID");
-        modelo.addColumn("Fecha");
-        modelo.addColumn("Código Equipo");
-        modelo.addColumn("Nombre Equipo");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Falla");
-        modelo.addColumn("Prioridad");
-        modelo.addColumn("Estado");
-        modelo.addColumn("Reportado Por");
-        modelo.addColumn("Observaciones");
-        
-        String sql = "SELECT f.id_falla,DATE_FORMAT(f.fecha_reporte,'%Y-%m-%d %H:%i:%s') fecha_reporte,"
-            + "i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,f.descripcion_falla,f.prioridad,f.estado,"
-            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) reportado_por,IFNULL(f.observaciones,'') observaciones "
-            + "FROM reporte_fallas f LEFT JOIN usuario u ON u.id=f.id_usuario LEFT JOIN inventario i ON i.id_inventario=f.id_inventario "
-            + "JOIN laboratorios l ON l.id_laboratorio=f.id_laboratorio WHERE f.estado NOT IN ('Atendida','Cancelada') ORDER BY f.fecha_reporte DESC";
-        
-        try {
-            PreparedStatement ps = con.prepareStatement(sql);
-            ResultSet rs = ps.executeQuery();
-            
-            while (rs.next()) {
-                Object[] fila = new Object[10];
-                
-                fila[0] = rs.getInt("id_falla");
-                fila[1] = rs.getString("fecha_reporte");
-                fila[2] = rs.getString("codigo_equipo");
-                fila[3] = rs.getString("nombre_equipo");
-                fila[4] = rs.getString("laboratorio");
-                fila[5] = rs.getString("descripcion_falla");
-                fila[6] = rs.getString("prioridad");
-                fila[7] = rs.getString("estado");
-                fila[8] = rs.getString("reportado_por");
-                fila[9] = rs.getString("observaciones");
-                
-                modelo.addRow(fila);
-            }
-            
-            tablaReportes.setModel(modelo);
-            ocultarColumnaID();
-        } catch (SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Error al cargar reportes de fallas: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (SQLException ex) {
-                
-            }
-        }
+        cargarTablaReportesFiltrada();
     }
     
     private void ocultarColumnaID() {
@@ -205,39 +200,24 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
     }
     
     private void cargarTablaReportesFiltrada() {
-        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel();
-        Connection con = ConexionBaseDatos.conectar();
-        
-        if (con == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return;
+        filtrosAplicados = capturarFiltrosReportes();
+        try {
+            aplicarModeloReportes(consultarReportes(filtrosAplicados));
+        } catch (IllegalStateException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Error al filtrar reportes: " + ex.getMessage(),
+                    "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
         }
+    }
 
-        modelo.addColumn("ID");
-        modelo.addColumn("Fecha");
-        modelo.addColumn("Código Equipo");
-        modelo.addColumn("Nombre Equipo");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Falla");
-        modelo.addColumn("Prioridad");
-        modelo.addColumn("Estado");
-        modelo.addColumn("Reportado Por");
-        modelo.addColumn("Observaciones");
-        
+    private FiltrosReportes capturarFiltrosReportes() {
         String textoBusqueda = txtBuscar.getText().trim();
-        String laboratorioSeleccionado = cmbLaboratorio.getSelectedItem().toString();
-        String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
-        String prioridadSeleccionada = cmbPrioridad.getSelectedItem().toString();
-        
-        if (textoBusqueda.equals(PH_BUSCAR)) {
-            textoBusqueda = "";
-        }
-        
+        if (textoBusqueda.equals(PH_BUSCAR)) textoBusqueda = "";
+        return new FiltrosReportes(textoBusqueda, cmbLaboratorio.getSelectedItem().toString(),
+                cmbEstado.getSelectedItem().toString(), cmbPrioridad.getSelectedItem().toString());
+    }
+
+    static javax.swing.table.DefaultTableModel consultarReportes(FiltrosReportes filtros) {
         String sql = "SELECT f.id_falla,DATE_FORMAT(f.fecha_reporte,'%Y-%m-%d %H:%i:%s') fecha_reporte,"
             + "i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,f.descripcion_falla,f.prioridad,f.estado,"
             + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) reportado_por,IFNULL(f.observaciones,'') observaciones "
@@ -246,11 +226,11 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
         
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
-        if (!textoBusqueda.isEmpty()) {
+        if (!filtros.texto().isEmpty()) {
             sql += "AND (i.codigo LIKE ? OR i.nombre_equipo LIKE ? OR l.nombre LIKE ? "
                 + "OR CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) LIKE ? OR f.descripcion_falla LIKE ?) ";
 
-            String busqueda = "%" + textoBusqueda + "%";
+            String busqueda = "%" + filtros.texto() + "%";
             
             parametros.add(busqueda);
             parametros.add(busqueda);
@@ -259,68 +239,35 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
             parametros.add(busqueda);
         }
         
-        if (!laboratorioSeleccionado.equals("Todos")) {
-            sql += "AND l.nombre = ?";
-            parametros.add(laboratorioSeleccionado);
+        if (!filtros.laboratorio().equals("Todos")) {
+            sql += "AND l.nombre = ? ";
+            parametros.add(filtros.laboratorio());
         }
-        
-        if (!estadoSeleccionado.equals("Todos")) {
-            sql += "AND f.estado = ?";
-            parametros.add(estadoSeleccionado);
+        if (!filtros.estado().equals("Todos")) {
+            sql += "AND f.estado = ? ";
+            parametros.add(filtros.estado());
         } else {
-            sql += "AND f.estado NOT IN ('Atendida', 'Cancelada')";
+            sql += "AND f.estado NOT IN ('Atendida', 'Cancelada') ";
         }
-        
-        if (!prioridadSeleccionada.equals("Todos")) {
-            sql += "AND prioridad = ?";
-            parametros.add(prioridadSeleccionada);
+        if (!filtros.prioridad().equals("Todos")) {
+            sql += "AND prioridad = ? ";
+            parametros.add(filtros.prioridad());
         }
-        
         sql += "ORDER BY fecha_reporte DESC";
-        
-        try {
-            PreparedStatement ps = con.prepareStatement(sql);
-            
-            for (int i = 0; i < parametros.size(); i++) {
-                ps.setString(i + 1, parametros.get(i));
-            }
-            
-            ResultSet rs = ps.executeQuery();
-            
-            while (rs.next()) {
-                Object[] fila = new Object[10];
-                
-                fila[0] = rs.getInt("id_falla");
-                fila[1] = rs.getString("fecha_reporte");
-                fila[2] = rs.getString("codigo_equipo");
-                fila[3] = rs.getString("nombre_equipo");
-                fila[4] = rs.getString("laboratorio");
-                fila[5] = rs.getString("descripcion_falla");
-                fila[6] = rs.getString("prioridad");
-                fila[7] = rs.getString("estado");
-                fila[8] = rs.getString("reportado_por");
-                fila[9] = rs.getString("observaciones");
-                
-                modelo.addRow(fila);
-            }
-            
-            tablaReportes.setModel(modelo);
-            ocultarColumnaID();
-        } catch (SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Error al filtrar reportes: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (SQLException ex) {
-                
-            }
+        return ConsultaTabla.ejecutar(sql,
+                new String[]{"ID", "Fecha", "Código Equipo", "Nombre Equipo", "Laboratorio", "Falla", "Prioridad", "Estado", "Reportado Por", "Observaciones"},
+                new String[]{"id_falla", "fecha_reporte", "codigo_equipo", "nombre_equipo", "laboratorio", "descripcion_falla", "prioridad", "estado", "reportado_por", "observaciones"},
+                ps -> { for (int i = 0; i < parametros.size(); i++) ps.setString(i + 1, parametros.get(i)); });
+    }
+
+    record FiltrosReportes(String texto, String laboratorio, String estado, String prioridad) {
+        static FiltrosReportes porDefecto() {
+            return new FiltrosReportes("", "Todos", "Todos", "Todos");
         }
     }
+
+    private record ResultadoReportes(FiltrosReportes filtros,
+            javax.swing.table.DefaultTableModel modelo) { }
     
     private void cargarDetalleReportesFalla(int idFalla) {
         Connection con = ConexionBaseDatos.conectar();
@@ -490,9 +437,11 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
             int filasReporte = psReporte.executeUpdate();
             
             if (filasReporte > 0) {
-                PreparedStatement psInventario = con.prepareStatement(sqlInventario);
-                psInventario.setString(1, codigoEquipo);
-                psInventario.executeUpdate();
+                if (codigoEquipo != null && !codigoEquipo.isBlank()) {
+                    PreparedStatement psInventario = con.prepareStatement(sqlInventario);
+                    psInventario.setString(1, codigoEquipo);
+                    psInventario.executeUpdate();
+                }
                 
                 javax.swing.JOptionPane.showMessageDialog(
                     this,
@@ -554,9 +503,11 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
             int filaReporte = psReporte.executeUpdate();
             
             if (filaReporte > 0) {
-                PreparedStatement psInventario = con.prepareStatement(sqlInventario);
-                psInventario.setString(1, codigoEquipo);
-                psInventario.executeUpdate();
+                if (codigoEquipo != null && !codigoEquipo.isBlank()) {
+                    PreparedStatement psInventario = con.prepareStatement(sqlInventario);
+                    psInventario.setString(1, codigoEquipo);
+                    psInventario.executeUpdate();
+                }
                 
                 javax.swing.JOptionPane.showMessageDialog(
                     this,
@@ -1318,43 +1269,28 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void btnInicioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInicioActionPerformed
-        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(nombreUsuario);
-        
-        ventanaDashboard.setVisible(true);
-        ventanaDashboard.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaDashboard);
     }//GEN-LAST:event_btnInicioActionPerformed
 
     private void btnBitacoraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBitacoraActionPerformed
-        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(nombreUsuario);
-        
-        ventanaBitacora.setVisible(true);
-        ventanaBitacora.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaBitacora);
     }//GEN-LAST:event_btnBitacoraActionPerformed
 
     private void btnInventarioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInventarioActionPerformed
-        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(nombreUsuario);
-        
-        ventanaInventario.setVisible(true);
-        ventanaInventario.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaInventario);
     }//GEN-LAST:event_btnInventarioActionPerformed
 
     private void btnMantActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnMantActionPerformed
-        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(nombreUsuario);
-        
-        ventanaMant.setVisible(true);
-        ventanaMant.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaMant);
     }//GEN-LAST:event_btnMantActionPerformed
 
     private void btnReservasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReservasActionPerformed
-        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(nombreUsuario);
-        
-        ventanaReserva.setVisible(true);
-        ventanaReserva.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReserva);
     }//GEN-LAST:event_btnReservasActionPerformed
 
     private void btnVerDetallesActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnVerDetallesActionPerformed
@@ -1455,7 +1391,8 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
             tablaReportes.getModel().getValueAt(filaModelo, 0).toString()
         );
         
-        String codigoEquipo = tablaReportes.getModel().getValueAt(filaModelo, 2).toString();
+        Object valorCodigoEquipo = tablaReportes.getModel().getValueAt(filaModelo, 2);
+        String codigoEquipo = valorCodigoEquipo == null ? null : valorCodigoEquipo.toString();
         String estadoActual = tablaReportes.getModel().getValueAt(filaModelo, 7).toString();
         
         if (estadoActual.equals("Atendida")) {
@@ -1510,7 +1447,8 @@ public class VentanaGestionReportesFallas extends javax.swing.JFrame {
             tablaReportes.getModel().getValueAt(filaModelo, 0).toString()
         );
         
-        String codigoEquipo = tablaReportes.getModel().getValueAt(filaModelo, 2).toString();
+        Object valorCodigoEquipo = tablaReportes.getModel().getValueAt(filaModelo, 2);
+        String codigoEquipo = valorCodigoEquipo == null ? null : valorCodigoEquipo.toString();
         String estadoActual = tablaReportes.getModel().getValueAt(filaModelo, 7).toString();
         
         if (estadoActual.equals("Atendida")) {

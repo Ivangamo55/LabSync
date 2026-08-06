@@ -11,6 +11,7 @@ import labsync.interfaz.mantenimiento.VentanaGestionMantenimiento;
 import labsync.interfaz.fallas.VentanaGestionReportesFallas;
 import labsync.interfaz.reservas.VentanaGestionReservas;
 import labsync.interfaz.panel.VentanaPanelLaboratorista;
+import labsync.modelo.SesionUsuario;
 
 import java.awt.Color;
         
@@ -36,11 +37,17 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaGestionInventario.class.getName());
     private String nombreUsuario;
+    private SesionUsuario sesion;
     private boolean modoEdicion = false;
     private String codigoOriginal = "";
     private final Color COLOR_PLACEHOLDER = new Color(150, 150, 150);
     private final Color COLOR_TEXTO = new Color(51, 51, 51);
     private final String PH_BUSCAR = "Código, marca, modelo o No. serie";   
+    private volatile FiltrosInventario filtrosAplicados = FiltrosInventario.porDefecto();
+    private boolean pestanasInstaladas;
+    private javax.swing.JTabbedPane pestanasInventario;
+    private javax.swing.JPanel panelEquipos;
+    private javax.swing.JPanel barraFiltros;
 
     private void cargarLaboratoriosDesdeBD() {
         CatalogoLaboratorios.cargarDisponibles(cmbLaboratorioModal, "Selecciona");
@@ -49,11 +56,17 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
     
     public VentanaGestionInventario(String nombreRecibido) {
         initComponents();
+        this.nombreUsuario = nombreRecibido;
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(this, sidebar, header, body);
+        normalizarEncabezadoInventario();
+        instalarPestanasInventario();
         cargarLaboratoriosDesdeBD();
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
        
-        this.nombreUsuario = nombreRecibido;
+        this.sesion = SesionUsuario.buscarLaboratorista(nombreRecibido);
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         
         txtObservaciones.setLineWrap(true);
         txtObservaciones.setWrapStyleWord(true);
@@ -61,7 +74,6 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
         ocultarCampoNombreEquipo();
         ponerPlaceholderBuscar();
         cargarTablaInventario();
-        cargarTablaInventarioFiltrada();
         iniciarActualizacionAutomatica();
     }
 
@@ -82,7 +94,13 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
     public VentanaGestionInventario() {
         initComponents();
         this.nombreUsuario = "Usuario";
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(this, sidebar, header, body);
+        normalizarEncabezadoInventario();
+        instalarPestanasInventario();
+        this.sesion = new SesionUsuario(0, "Usuario", "Usuario", "Laboratorista");
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         cargarLaboratoriosDesdeBD();
         
         txtObservaciones.setLineWrap(true);
@@ -91,16 +109,93 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
         ocultarCampoNombreEquipo();
         ponerPlaceholderBuscar();
         cargarTablaInventario();
-        cargarTablaInventarioFiltrada();
         iniciarActualizacionAutomatica();
     }
 
+    public VentanaGestionInventario(SesionUsuario sesionRecibida) {
+        this(sesionRecibida == null ? "Usuario" : sesionRecibida.getNombre());
+        if (sesionRecibida != null) this.sesion = sesionRecibida;
+    }
+
+    private void normalizarEncabezadoInventario() {
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarSidebar(sidebar);
+        barraFiltros = labsync.interfaz.comun.LayoutLaboratorista.normalizarHeaderOperativo(
+                header, lbTitulo, txtBuscar,
+                new java.awt.Component[]{laboratorio, estado, dispositivo},
+                new java.awt.Component[]{lbLaboratorio, lbEstado, lbTipoDispositivo},
+                btnLimpiar, btnBuscar);
+        labsync.interfaz.comun.LayoutLaboratorista.restaurarHeaderIdentidad(
+                this, header, lbTitulo, nombreUsuario);
+    }
+
+    /** Añade las pestañas dentro del área de contenido conservando el layout raíz generado. */
+    private void instalarPestanasInventario() {
+        if (pestanasInstaladas) return;
+        pestanasInstaladas = true;
+        body.removeAll();
+        body.setLayout(new java.awt.BorderLayout());
+
+        panelEquipos = new javax.swing.JPanel(new java.awt.BorderLayout(0, 18));
+        panelEquipos.setBackground(new java.awt.Color(204, 204, 204));
+        panelEquipos.setBorder(javax.swing.BorderFactory.createEmptyBorder(20, 40, 20, 40));
+        javax.swing.JPanel centro = new javax.swing.JPanel(new java.awt.BorderLayout(0, 18));
+        centro.setOpaque(false);
+        centro.add(barraFiltros, java.awt.BorderLayout.NORTH);
+        centro.add(jScrollPane1, java.awt.BorderLayout.CENTER);
+        panelEquipos.add(centro, java.awt.BorderLayout.CENTER);
+
+        javax.swing.JPanel acciones = new javax.swing.JPanel(new java.awt.BorderLayout());
+        acciones.setOpaque(false);
+        javax.swing.JPanel accionesIzquierda = new javax.swing.JPanel(
+                new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 10, 0));
+        accionesIzquierda.setOpaque(false);
+        accionesIzquierda.add(btnRegistrar);
+        accionesIzquierda.add(btnEditar);
+        accionesIzquierda.add(btnDarBaja);
+        acciones.add(accionesIzquierda, java.awt.BorderLayout.WEST);
+        acciones.add(btnExportar, java.awt.BorderLayout.EAST);
+        panelEquipos.add(acciones, java.awt.BorderLayout.SOUTH);
+
+        pestanasInventario = new javax.swing.JTabbedPane();
+        pestanasInventario.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 13));
+        pestanasInventario.setForeground(new java.awt.Color(6, 140, 115));
+        pestanasInventario.addTab("Equipos", panelEquipos);
+        pestanasInventario.addTab("Software por laboratorio", new PanelSoftwareLaboratorio(this));
+        body.add(pestanasInventario, java.awt.BorderLayout.CENTER);
+        configurarPresentacionTablaInventario();
+        body.revalidate();
+        body.repaint();
+    }
+
+    private void configurarPresentacionTablaInventario() {
+        labsync.interfaz.comun.EstiloTablaLaboratorista.aplicar(tablaInventario);
+        tablaInventario.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
+        tablaInventario.setFillsViewportHeight(true);
+        int[] anchos = {105, 0, 145, 100, 105, 135, 120, 100, 155, 245};
+        for (int i = 0; i < anchos.length && i < tablaInventario.getColumnCount(); i++) {
+            javax.swing.table.TableColumn columna = tablaInventario.getColumnModel().getColumn(i);
+            columna.setPreferredWidth(anchos[i]);
+            if (i != 1) columna.setMinWidth(Math.min(80, anchos[i]));
+        }
+        ocultarColumnaNombreEquipo();
+    }
+
     private void iniciarActualizacionAutomatica() {
-        new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT i.codigo, i.nombre_equipo, i.tipo_dispositivo, i.marca, i.modelo, i.no_serie, l.nombre laboratorio, i.estado, IFNULL(DATE_FORMAT(i.ultimo_mantenimiento, '%d/%m/%Y'), 'Sin registro') ultimo_mantenimiento, IFNULL(i.observaciones, '') observaciones FROM inventario i JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio ORDER BY i.id_inventario DESC",
-                new String[]{"Código", "Nombre Equipo", "Tipo de Dispositivo", "Marca", "Modelo", "No. Serie", "Laboratorio", "Estado", "Último Mantenimiento", "Observaciones"},
-                new String[]{"codigo", "nombre_equipo", "tipo_dispositivo", "marca", "modelo", "no_serie", "laboratorio", "estado", "ultimo_mantenimiento", "observaciones"}),
-                modelo -> { tablaInventario.setModel(modelo); ocultarColumnaNombreEquipo(); });
+        new ActualizacionAutomatica<>(this, 7_000,
+                () -> {
+                    FiltrosInventario filtros = filtrosAplicados;
+                    return new ResultadoInventario(filtros, consultarInventario(filtros));
+                },
+                resultado -> {
+                    if (resultado.filtros().equals(filtrosAplicados)) {
+                        aplicarModeloInventario(resultado.modelo());
+                    }
+                });
+    }
+
+    private void aplicarModeloInventario(javax.swing.table.DefaultTableModel modelo) {
+        labsync.interfaz.comun.ActualizadorModeloTabla.aplicar(
+                tablaInventario, modelo, 0, this::ocultarColumnaNombreEquipo);
     }
     
     private void ocultarCampoNombreEquipo() {
@@ -163,7 +258,7 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
             columnaNombre.setWidth(0);
         }
     }
-    
+
     private void ponerPlaceholderBuscar() {
         txtBuscar.setText(PH_BUSCAR);
         txtBuscar.setForeground(COLOR_PLACEHOLDER);
@@ -423,101 +518,29 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
     }
     
     private void cargarTablaInventario() {
-        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel();
-        
-        modelo.addColumn("Código");
-        modelo.addColumn("Nombre Equipo");
-        modelo.addColumn("Tipo de Dispositivo");
-        modelo.addColumn("Marca");
-        modelo.addColumn("Modelo");
-        modelo.addColumn("No. Serie");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Estado");
-        modelo.addColumn("Último Mantenimiento");
-        modelo.addColumn("Observaciones");
-        
-        tablaInventario.setModel(modelo);
-        ocultarColumnaNombreEquipo();   
-        
-        String sql = "SELECT codigo, nombre_equipo, tipo_dispositivo, marca, modelo, "
-            + "i.no_serie, l.nombre AS laboratorio, i.estado, "
-            + "IFNULL(DATE_FORMAT(i.ultimo_mantenimiento, '%d/%m/%Y'), 'Sin registro') AS ultimo_mantenimiento, "
-            + "IFNULL(i.observaciones, '') AS observaciones "
-            + "FROM inventario i JOIN laboratorios l ON l.id_laboratorio = i.id_laboratorio "
-            + "ORDER BY i.id_inventario DESC";
-        
-        java.sql.Connection con = ConexionBaseDatos.conectar();
-        
-        if (con == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return;
-        }
-        
-        try {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            java.sql.ResultSet rs = ps.executeQuery();
-            
-            while (rs.next()) {
-                Object[] fila = new Object[10];
-                
-                fila[0] = rs.getString("codigo");
-                fila[1] = rs.getString("nombre_equipo");
-                fila[2] = rs.getString("tipo_dispositivo");
-                fila[3] = rs.getString("marca");
-                fila[4] = rs.getString("modelo");
-                fila[5] = rs.getString("no_serie");
-                fila[6] = rs.getString("laboratorio");
-                fila[7] = rs.getString("estado");
-                fila[8] = rs.getString("ultimo_mantenimiento");
-                fila[9] = rs.getString("observaciones");
-                
-                modelo.addRow(fila);
-            }
-        } catch (java.sql.SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Error al cargar inventario: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (java.sql.SQLException ex) {
-                
-            }
-        }
+        cargarTablaInventarioFiltrada();
     }
     
     private void cargarTablaInventarioFiltrada() {
-        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel();
-        
-        modelo.addColumn("Código");
-        modelo.addColumn("Nombre Equipo");
-        modelo.addColumn("Tipo de Dispositivo");
-        modelo.addColumn("Marca");
-        modelo.addColumn("Modelo");
-        modelo.addColumn("No. Serie");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Estado");
-        modelo.addColumn("Último Mantenimiento");
-        modelo.addColumn("Observaciones");
-        
-        String textoBusqueda = txtBuscar.getText().trim();
-
-        if (textoBusqueda.equals(PH_BUSCAR)) {
-            textoBusqueda = "";
+        filtrosAplicados = capturarFiltrosInventario();
+        try {
+            aplicarModeloInventario(consultarInventario(filtrosAplicados));
+        } catch (IllegalStateException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Error al filtrar inventario: " + ex.getMessage(),
+                    "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
         }
-        
-        String laboratorioSeleccionado = laboratorio.getSelectedItem().toString();
-        String estadoSeleccionado = estado.getSelectedItem().toString();
-        String dispositivoSeleccionado = dispositivo.getSelectedItem().toString();
-        
+    }
+
+    private FiltrosInventario capturarFiltrosInventario() {
+        String textoBusqueda = txtBuscar.getText().trim();
+        if (textoBusqueda.equals(PH_BUSCAR)) textoBusqueda = "";
+        return new FiltrosInventario(textoBusqueda,
+                laboratorio.getSelectedItem().toString(), estado.getSelectedItem().toString(),
+                dispositivo.getSelectedItem().toString());
+    }
+
+    static javax.swing.table.DefaultTableModel consultarInventario(FiltrosInventario filtros) {
         String sql = "SELECT i.codigo, i.nombre_equipo, i.tipo_dispositivo, i.marca, i.modelo, "
             + "i.no_serie, l.nombre AS laboratorio, i.estado, "
             + "IFNULL(DATE_FORMAT(i.ultimo_mantenimiento, '%d/%m/%Y'), 'Sin registro') AS ultimo_mantenimiento, "
@@ -526,10 +549,10 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
         
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
-        if (!textoBusqueda.isEmpty()) {
+        if (!filtros.texto().isEmpty()) {
             sql += "AND (i.codigo LIKE ? OR i.marca LIKE ? OR i.modelo LIKE ? OR i.no_serie LIKE ?) ";
 
-            String busqueda = "%" + textoBusqueda + "%";
+            String busqueda = "%" + filtros.texto() + "%";
 
             parametros.add(busqueda);
             parametros.add(busqueda);
@@ -537,77 +560,33 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
             parametros.add(busqueda);
         }
         
-        if (!laboratorioSeleccionado.equals("Todos") && !laboratorioSeleccionado.startsWith("Item")) {
+        if (!filtros.laboratorio().equals("Todos") && !filtros.laboratorio().startsWith("Item")) {
             sql += "AND l.nombre = ? ";
-            parametros.add(laboratorioSeleccionado);
+            parametros.add(filtros.laboratorio());
         }
-
-        if (!estadoSeleccionado.equals("Todos")) {
+        if (!filtros.estado().equals("Todos")) {
             sql += "AND i.estado = ? ";
-            parametros.add(estadoSeleccionado);
+            parametros.add(filtros.estado());
         }
-
-        if (!dispositivoSeleccionado.equals("Todos")) {
+        if (!filtros.dispositivo().equals("Todos")) {
             sql += "AND i.tipo_dispositivo = ? ";
-            parametros.add(dispositivoSeleccionado);
+            parametros.add(filtros.dispositivo());
         }
-        
-        java.sql.Connection con = ConexionBaseDatos.conectar();
-        
-        if (con == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return;
-        }
-        
-        try {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            
-            for (int i = 0; i < parametros.size(); i++) {
-                ps.setString(i + 1, parametros.get(i));
-            }
-            
-            java.sql.ResultSet rs = ps.executeQuery();
-            
-            while (rs.next()) {
-                Object[] fila  = new Object[10];
-                
-                fila[0] = rs.getString("codigo");
-                fila[1] = rs.getString("nombre_equipo");
-                fila[2] = rs.getString("tipo_dispositivo");
-                fila[3] = rs.getString("marca");
-                fila[4] = rs.getString("modelo");
-                fila[5] = rs.getString("no_serie");
-                fila[6] = rs.getString("laboratorio");
-                fila[7] = rs.getString("estado");
-                fila[8] = rs.getString("ultimo_mantenimiento");
-                fila[9] = rs.getString("observaciones");
-                
-                modelo.addRow(fila);
-            }
-            
-            tablaInventario.setModel(modelo);
-            ocultarColumnaNombreEquipo();
-        } catch (java.sql.SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Error al filtrar inventario: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (java.sql.SQLException ex) {
-                
-            }
-        }
-        
+        sql += "ORDER BY i.id_inventario DESC";
+        return ConsultaTabla.ejecutar(sql,
+                new String[]{"Código", "Nombre Equipo", "Tipo de Dispositivo", "Marca", "Modelo", "No. Serie", "Laboratorio", "Estado", "Último Mantenimiento", "Observaciones"},
+                new String[]{"codigo", "nombre_equipo", "tipo_dispositivo", "marca", "modelo", "no_serie", "laboratorio", "estado", "ultimo_mantenimiento", "observaciones"},
+                ps -> { for (int i = 0; i < parametros.size(); i++) ps.setString(i + 1, parametros.get(i)); });
     }
+
+    record FiltrosInventario(String texto, String laboratorio, String estado, String dispositivo) {
+        static FiltrosInventario porDefecto() {
+            return new FiltrosInventario("", "Todos", "Todos", "Todos");
+        }
+    }
+
+    private record ResultadoInventario(FiltrosInventario filtros,
+            javax.swing.table.DefaultTableModel modelo) { }
     
     private void darDeBajaEquipo(String codigo) {
         java.sql.Connection con = ConexionBaseDatos.conectar();
@@ -1078,7 +1057,7 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
         cmbTipoDispositivoModal.setBackground(new java.awt.Color(255, 255, 255));
         cmbTipoDispositivoModal.setFont(new java.awt.Font("Arial", 1, 12)); // NOI18N
         cmbTipoDispositivoModal.setForeground(new java.awt.Color(102, 102, 102));
-        cmbTipoDispositivoModal.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Selecciona", "Computadora", "Monitor", "Teclado", "Mouse", "Proyector", "Extensión", "HDMI", "Otro" }));
+        cmbTipoDispositivoModal.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Selecciona", "Computadora", "Monitor", "Teclado", "Mouse", "Proyector", "Extensión", "HDMI", "Material peligroso", "Batería", "Batería de UPS", "Tóner", "Residuo electrónico", "Otro" }));
         cmbTipoDispositivoModal.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         cmbTipoDispositivoModal.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         cmbTipoDispositivoModal.setPreferredSize(new java.awt.Dimension(150, 24));
@@ -1280,7 +1259,7 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
         dispositivo.setBackground(new java.awt.Color(255, 255, 255));
         dispositivo.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         dispositivo.setForeground(new java.awt.Color(102, 102, 102));
-        dispositivo.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "Computadora", "Monitor", "Teclado", "Mouse", "Proyector", "Extensión", "HDMI", "Otro" }));
+        dispositivo.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "Computadora", "Monitor", "Teclado", "Mouse", "Proyector", "Extensión", "HDMI", "Material peligroso", "Batería", "Batería de UPS", "Tóner", "Residuo electrónico", "Otro" }));
         dispositivo.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         dispositivo.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         dispositivo.setPreferredSize(new java.awt.Dimension(150, 30));
@@ -1427,20 +1406,13 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void btnBitacoraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBitacoraActionPerformed
-        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(nombreUsuario);
-        
-        ventanaBitacora.setVisible(true);
-        ventanaBitacora.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaBitacora);
     }//GEN-LAST:event_btnBitacoraActionPerformed
 
     private void btnInicioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInicioActionPerformed
-        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(nombreUsuario);
-        
-        ventanaDashboard.setVisible(true);
-        ventanaDashboard.setLocationRelativeTo(null);
-        
-        this.dispose();
+        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaDashboard);
     }//GEN-LAST:event_btnInicioActionPerformed
 
     private void btnEditarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEditarActionPerformed
@@ -1650,20 +1622,13 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
     }//GEN-LAST:event_btnDarBajaActionPerformed
 
     private void btnMantActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnMantActionPerformed
-        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(nombreUsuario);
-        
-        ventanaMant.setVisible(true);
-        ventanaMant.setLocationRelativeTo(null);
-        
-        this.dispose();
+        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaMant);
     }//GEN-LAST:event_btnMantActionPerformed
 
     private void btnReservasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReservasActionPerformed
-        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(nombreUsuario);
-        
-        ventanaReserva.setVisible(true);
-        ventanaReserva.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReserva);
     }//GEN-LAST:event_btnReservasActionPerformed
 
     private void btnExportarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarActionPerformed
@@ -1671,11 +1636,8 @@ public class VentanaGestionInventario extends javax.swing.JFrame {
     }//GEN-LAST:event_btnExportarActionPerformed
 
     private void btnReporteFallasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReporteFallasActionPerformed
-        VentanaGestionReportesFallas ventanaReporteFalla = new VentanaGestionReportesFallas(nombreUsuario);
-        
-        ventanaReporteFalla.setVisible(true);
-        ventanaReporteFalla.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReportesFallas ventanaReporteFalla = new VentanaGestionReportesFallas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReporteFalla);
     }//GEN-LAST:event_btnReporteFallasActionPerformed
 
     public static void main(String args[]) {

@@ -400,8 +400,8 @@ public class VentanaRegistroUsuario extends javax.swing.JFrame {
         
         // 4. PEDIR DATOS EXTRA CON VENTANAS EMERGENTES
         String datoExtra1 = "N/A", datoExtra2 = "N/A", datoExtra3 = "N/A";
-        String[] opcionesTurno = {"Matutino", "Vespertino"};
-        String[] opcionesCarrera = {"TSU - DSM", "TSU - ENV"};
+        String[] opcionesTurno = labsync.modelo.OpcionesAcademicas.TURNOS.toArray(String[]::new);
+        String[] opcionesCarrera = labsync.modelo.OpcionesAcademicas.CARRERAS.toArray(String[]::new);
         String[] opcionesPiso = {"PB - M", "1 - 5"};
         
         if (rolSeleccionado.equals("Estudiante")) {
@@ -463,14 +463,14 @@ public class VentanaRegistroUsuario extends javax.swing.JFrame {
                 // 2. INSERCIÓN EN TABLA HIJA
                 if (idGenerado != -1) {
                     if (rolSeleccionado.equals("Estudiante")) { 
-                        String sqlAlumno = "INSERT INTO estudiante (id_usuario,matricula,id_trayectoria,turno) SELECT ?,?,id_trayectoria,? FROM trayectorias WHERE codigo=SUBSTRING_INDEX(?,' - ',-1) AND activa=1";
+                        String sqlAlumno = "INSERT INTO estudiante (id_usuario,matricula,carrera,turno) VALUES (?,?,?,?)";
                         java.sql.PreparedStatement psAlumno = con.prepareStatement(sqlAlumno);
                         psAlumno.setInt(1, idGenerado);
                         psAlumno.setString(2, datoExtra1); 
-                            psAlumno.setString(3, datoExtra3);
-                            psAlumno.setString(4, datoExtra2);
+                        psAlumno.setString(3, datoExtra2);
+                        psAlumno.setString(4, datoExtra3);
                         if (psAlumno.executeUpdate() != 1) {
-                            throw new java.sql.SQLException("La trayectoria académica seleccionada no existe o está inactiva.");
+                            throw new java.sql.SQLException("No se pudo registrar el perfil del estudiante.");
                         }
                         
                     } else if (rolSeleccionado.equals("Laboratorista")) {

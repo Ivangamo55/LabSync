@@ -240,14 +240,16 @@
                   <Color blue="66" green="66" red="66" type="rgb"/>
                 </Property>
                 <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
-                  <StringArray count="7">
+                  <StringArray count="9">
                     <StringItem index="0" value="Selecciona"/>
                     <StringItem index="1" value="Preventivo"/>
                     <StringItem index="2" value="Correctivo"/>
                     <StringItem index="3" value="Actualizaci&#xf3;n de software"/>
-                    <StringItem index="4" value="Limpieza"/>
-                    <StringItem index="5" value="Retiro de equipo obsoleto"/>
-                    <StringItem index="6" value="Otro"/>
+                    <StringItem index="4" value="Actualizaci&#xf3;n de hardware"/>
+                    <StringItem index="5" value="Disposici&#xf3;n de material peligroso"/>
+                    <StringItem index="6" value="Retiro de equipo obsoleto"/>
+                    <StringItem index="7" value="Limpieza"/>
+                    <StringItem index="8" value="Otro"/>
                   </StringArray>
                 </Property>
                 <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">
@@ -795,14 +797,16 @@
               <Color blue="66" green="66" red="66" type="rgb"/>
             </Property>
             <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
-              <StringArray count="7">
+              <StringArray count="9">
                 <StringItem index="0" value="Todos"/>
                 <StringItem index="1" value="Preventivo"/>
                 <StringItem index="2" value="Correctivo"/>
                 <StringItem index="3" value="Actualizaci&#xf3;n de software"/>
-                <StringItem index="4" value="Limpieza"/>
-                <StringItem index="5" value="Retiro de equipo obsoleto"/>
-                <StringItem index="6" value="Otro"/>
+                <StringItem index="4" value="Actualizaci&#xf3;n de hardware"/>
+                <StringItem index="5" value="Disposici&#xf3;n de material peligroso"/>
+                <StringItem index="6" value="Retiro de equipo obsoleto"/>
+                <StringItem index="7" value="Limpieza"/>
+                <StringItem index="8" value="Otro"/>
               </StringArray>
             </Property>
             <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">

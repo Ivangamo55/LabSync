@@ -1,6 +1,7 @@
 package labsync.interfaz.reservas;
 
 import labsync.interfaz.comun.ActualizacionAutomatica;
+import labsync.interfaz.comun.ActualizadorModeloTabla;
 import labsync.aplicacion.AplicacionLabSync;
 import labsync.configuracion.ConexionBaseDatos;
 import labsync.persistencia.ConsultaTabla;
@@ -27,6 +28,7 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
 
     private String nombreUsuario;
     private SesionUsuario sesion;
+    private volatile FiltrosMisReservas filtrosAplicados = FiltrosMisReservas.porDefecto();
 
     public VentanaMisReservasProfesor() {
         this("Profesor");
@@ -51,12 +53,21 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
     }
 
     private void iniciarActualizacionAutomatica() {
-        new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
+        new ActualizacionAutomatica<>(this, 7_000, this::consultarReservas,
+                this::aplicarModeloReservas);
+    }
+
+    private javax.swing.table.DefaultTableModel consultarReservas() {
+        return ConsultaTabla.ejecutar(
                 "SELECT r.id_reserva,DATE_FORMAT(r.fecha,'%d/%m/%Y') fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre laboratorio,SUBSTRING_INDEX(r.carrera,' - ',1) carrera,CONCAT(r.grado,r.grupo) grupo,r.actividad,r.estado FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE r.id_usuario=? AND u.rol='Profesor' ORDER BY r.fecha DESC,r.hora_inicio",
                 new String[]{"ID", "Fecha", "Horario", "Laboratorio", "Carrera", "Grupo", "Actividad", "Estado"},
                 new String[]{"id_reserva", "fecha", "horario", "laboratorio", "carrera", "grupo", "actividad", "estado"},
-                ps -> ps.setInt(1, sesion.getId())),
-                modelo -> { tablaReservas.setModel(modelo); aplicarFiltro(); });
+                ps -> ps.setInt(1, sesion.getId()));
+    }
+
+    private void aplicarModeloReservas(javax.swing.table.DefaultTableModel modelo) {
+        ActualizadorModeloTabla.aplicar(tablaReservas, modelo, 0,
+                () -> ocultarPrimeraColumna(tablaReservas));
     }
 
     private void configurarNavegacion() {
@@ -110,9 +121,6 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
 
     private void configurarPantalla() {
         configurarPlaceholderBusqueda();
-        tablaReservas.setModel(new javax.swing.table.DefaultTableModel(new Object[][]{}, new String[]{"ID", "Fecha", "Horario", "Laboratorio", "Carrera", "Grupo", "Actividad", "Estado"}) {
-            @Override public boolean isCellEditable(int row, int column) { return false; }
-        });
         tablaReservas.setRowHeight(32);
         ocultarPrimeraColumna(tablaReservas);
         cargarLaboratorios(cmbLaboratorio, true);
@@ -154,34 +162,31 @@ public class VentanaMisReservasProfesor extends javax.swing.JFrame {
     }
 
     private void cargarReservas() {
-        javax.swing.table.DefaultTableModel modelo = (javax.swing.table.DefaultTableModel) tablaReservas.getModel();
-        modelo.setRowCount(0);
-        String sql = "SELECT r.id_reserva,DATE_FORMAT(r.fecha,'%d/%m/%Y') fecha,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,l.nombre AS laboratorio, "
-                + "SUBSTRING_INDEX(r.carrera, ' - ', 1) carrera, CONCAT(r.grado, r.grupo) grupo, r.actividad, r.estado FROM reservas r "
-                + "JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
-                + "WHERE r.id_usuario=? AND u.rol='Profesor' ORDER BY r.fecha DESC,r.hora_inicio";
-        try (java.sql.Connection con = ConexionBaseDatos.conectar()) {
-            if (con == null) return;
-            try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
-                ps.setInt(1, sesion.getId());
-                try (java.sql.ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) modelo.addRow(new Object[]{rs.getInt("id_reserva"), rs.getString("fecha"), rs.getString("horario"), rs.getString("laboratorio"), rs.getString("carrera"), rs.getString("grupo"), rs.getString("actividad"), rs.getString("estado")});
-                }
-            }
-        } catch (java.sql.SQLException ex) {
+        try {
+            aplicarModeloReservas(consultarReservas());
+        } catch (IllegalStateException ex) {
             javax.swing.JOptionPane.showMessageDialog(this, "No se pudieron cargar las reservas:\n" + ex.getMessage(), "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private void aplicarFiltro() {
+        filtrosAplicados = new FiltrosMisReservas(
+                esPlaceholderBusqueda() ? "" : txtBuscar.getText().trim(),
+                String.valueOf(cmbEstado.getSelectedItem()),
+                String.valueOf(cmbLaboratorio.getSelectedItem()));
         javax.swing.table.TableRowSorter<javax.swing.table.TableModel> sorter = new javax.swing.table.TableRowSorter<>(tablaReservas.getModel());
         tablaReservas.setRowSorter(sorter);
         java.util.List<javax.swing.RowFilter<Object, Object>> filtros = new java.util.ArrayList<>();
-        String texto = esPlaceholderBusqueda() ? "" : txtBuscar.getText().trim();
-        if (!texto.isEmpty()) filtros.add(javax.swing.RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(texto)));
-        if (cmbEstado.getSelectedIndex() > 0) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(cmbEstado.getSelectedItem().toString()) + "$", 7));
-        if (cmbLaboratorio.getSelectedIndex() > 0) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(cmbLaboratorio.getSelectedItem().toString()) + "$", 3));
+        if (!filtrosAplicados.texto().isEmpty()) filtros.add(javax.swing.RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(filtrosAplicados.texto())));
+        if (!"Todos".equals(filtrosAplicados.estado())) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(filtrosAplicados.estado()) + "$", 7));
+        if (!"Todos".equals(filtrosAplicados.laboratorio())) filtros.add(javax.swing.RowFilter.regexFilter("^" + java.util.regex.Pattern.quote(filtrosAplicados.laboratorio()) + "$", 3));
         sorter.setRowFilter(filtros.isEmpty() ? null : javax.swing.RowFilter.andFilter(filtros));
+    }
+
+    record FiltrosMisReservas(String texto, String estado, String laboratorio) {
+        static FiltrosMisReservas porDefecto() {
+            return new FiltrosMisReservas("", "Todos", "Todos");
+        }
     }
 
     private int idSeleccionado() {

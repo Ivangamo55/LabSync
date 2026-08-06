@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Manual de usuario de LabSync</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body class="documento">
+<section class="portada">
+  <div>
+    <img class="logo" width="200" height="200" src="../LabSync/src/main/resources/images/labsync_200.png" alt="Logotipo LabSync">
+    <h1>Manual de usuario</h1>
+    <p class="subtitulo">LabSync 1.0 · Operación y pruebas funcionales</p>
+  </div>
+  <div class="meta">
+    <p><strong>Sistema:</strong> Administración de laboratorios, reservas, bitácora, inventario, software, fallas, horarios y mantenimiento.</p>
+    <p><strong>Perfiles cubiertos:</strong> Estudiante, Profesor y Laboratorista.</p>
+    <p><strong>Versión documental:</strong> 1.0 · <strong>Fecha:</strong> 5 de agosto de 2026.</p>
+    <p><strong>Base de elaboración:</strong> comportamiento y pantallas del código fuente actual.</p>
+  </div>
+</section>
+
+<h1 class="pagina">Control del documento</h1>
+<table>
+  <tr><th>Elemento</th><th>Detalle</th></tr>
+  <tr><td>Objetivo</td><td>Permitir que una persona usuaria opere LabSync y ejecute pruebas manuales repetibles sin depender de conocimiento del código.</td></tr>
+  <tr><td>Alcance</td><td>Acceso, registro, paneles, reservas, bitácora, fallas, inventario, software, ciclos y horarios, mantenimiento, alertas, exportaciones y cierre de sesión.</td></tr>
+  <tr><td>Fuera de alcance</td><td>Administración física de MySQL/MariaDB y desarrollo del código; ambos se describen en el manual técnico.</td></tr>
+  <tr><td>Evidencia visual</td><td>Las capturas se renderizaron desde las clases Swing reales con una copia temporal de datos; no son bocetos.</td></tr>
+  <tr><td>Precaución</td><td>Las pruebas que crean, aprueban, cancelan, finalizan o dan de baja registros modifican la base conectada. Utilice una base exclusiva de pruebas.</td></tr>
+</table>
+
+<div class="callout warning"><strong>Antes de probar:</strong> confirme con el responsable técnico que la aplicación apunta a una base de pruebas. No ejecute casos destructivos en producción. Los botones <em>Dar de baja</em>, <em>Marcar realizado</em>, <em>Cancelar</em>, <em>Aprobar</em>, <em>Rechazar</em> y <em>Finalizar</em> cambian estados persistentes.</div>
+
+<h2>Contenido</h2>
+<div class="toc">
+<ol>
+  <li>Introducción y conceptos</li>
+  <li>Preparación del puesto</li>
+  <li>Acceso, registro y sesión</li>
+  <li>Operación como estudiante</li>
+  <li>Operación como profesor</li>
+  <li>Operación como laboratorista</li>
+  <li>Alertas y actualización automática</li>
+  <li>Exportación a Excel</li>
+  <li>Plan de pruebas funcionales</li>
+  <li>Mensajes, problemas y recuperación</li>
+  <li>Glosario y listas de verificación</li>
+</ol>
+</div>
+
+<h1 class="pagina">1. Introducción y conceptos</h1>
+<p class="lead">LabSync es una aplicación de escritorio Java Swing para coordinar el uso académico y técnico de laboratorios. Cada cuenta entra con un rol y ve únicamente las operaciones previstas para ese perfil.</p>
+
+<h2>1.1 Perfiles y permisos</h2>
+<table>
+  <tr><th>Perfil</th><th>Puede hacer</th><th>No debe esperar</th></tr>
+  <tr><td><strong>Estudiante</strong></td><td>Consultar disponibilidad, solicitar un equipo, revisar sus reservas y crear/consultar reportes de falla.</td><td>Reservar el laboratorio completo, aprobar solicitudes o administrar inventario.</td></tr>
+  <tr><td><strong>Profesor</strong></td><td>Solicitar un laboratorio completo para una actividad extraordinaria, consultar/cancelar sus reservas, registrar clases o reservas en bitácora y reportar fallas.</td><td>Aprobar su propia reserva o modificar horarios regulares.</td></tr>
+  <tr><td><strong>Laboratorista</strong></td><td>Resolver reservas, consultar/exportar bitácora, administrar inventario y software, atender fallas, programar/cerrar mantenimiento y administrar ciclos/horarios.</td><td>Crear una reserva desde los formularios de estudiante/profesor.</td></tr>
+  <tr><td><strong>Externo</strong></td><td>La cuenta puede registrarse.</td><td>La interfaz funcional para este rol aún no está implementada; al iniciar sesión aparece un mensaje informativo.</td></tr>
+</table>
+
+<h2>1.2 Estados que verá</h2>
+<table class="compact">
+  <tr><th>Entidad</th><th>Estados</th><th>Lectura operativa</th></tr>
+  <tr><td>Reserva</td><td>Pendiente, Aprobada, Rechazada, Cancelada, Finalizada</td><td>Pendiente y Aprobada cuentan como ocupación activa. Finalizada representa un uso cerrado.</td></tr>
+  <tr><td>Reporte de falla</td><td>Pendiente, En revisión, Atendida, Cancelada</td><td>En revisión bloquea la disponibilidad del laboratorio afectado.</td></tr>
+  <tr><td>Inventario</td><td>Disponible, En mantenimiento, Con falla, Baja</td><td>Baja conserva el historial; no significa borrado físico.</td></tr>
+  <tr><td>Mantenimiento</td><td>Pendiente, En proceso, Realizado, Cancelado</td><td>Pendiente/En proceso puede bloquear el laboratorio desde la fecha programada.</td></tr>
+  <tr><td>Software</td><td>Actualizado, Desactualizado, Pendiente de instalación, Pendiente de eliminación, Eliminado</td><td>Eliminado mantiene la fila como historial.</td></tr>
+  <tr><td>Alerta</td><td>Nueva, Leída, Atendida</td><td>La campana muestra asuntos pendientes y permite ir al módulo de resolución.</td></tr>
+</table>
+
+<h2>1.3 Reglas centrales de disponibilidad</h2>
+<ul>
+  <li>Una clase regular vigente bloquea reservas extraordinarias que se traslapen.</li>
+  <li>Una reserva de profesor es exclusiva para todo el laboratorio.</li>
+  <li>Las reservas de estudiante se comparten hasta agotar <em>total_equipos</em>; cada solicitud consume un equipo.</li>
+  <li>Un laboratorio no disponible, un mantenimiento activo aplicable o una falla en revisión impiden nuevas reservas.</li>
+  <li>Los traslapes se calculan por intervalo; por ejemplo, 09:00–11:00 se traslapa con 10:30–12:00.</li>
+  <li>La disponibilidad se consulta al solicitar y se vuelve a comprobar al aprobar. Una consulta positiva no garantiza una aprobación posterior si cambió la ocupación.</li>
+</ul>
+
+<h1 class="pagina">2. Preparación del puesto</h1>
+<h2>2.1 Requisitos para usar la aplicación</h2>
+<ul class="checklist">
+  <li>JDK 17 o posterior instalado.</li>
+  <li>Entorno gráfico de escritorio; LabSync no es una aplicación web.</li>
+  <li>Acceso de red al servidor MySQL/MariaDB configurado.</li>
+  <li>JAR construido en <code>LabSync/target/LabSync-1.0.jar</code>.</li>
+  <li>Resolución recomendada de 1366×768 o mayor; maximice ventanas grandes.</li>
+  <li>Permiso de escritura en la carpeta donde se guardarán exportaciones <code>.xlsx</code>.</li>
+</ul>
+
+<h2>2.2 Inicio de la aplicación</h2>
+<p>En Windows, haga doble clic en <code>Ejecutar-LabSync.cmd</code>. En una terminal:</p>
+<pre>java -jar .\LabSync\target\LabSync-1.0.jar</pre>
+<p>En Linux o macOS:</p>
+<pre>java -jar ./LabSync/target/LabSync-1.0.jar</pre>
+<p>El resultado esperado es la pantalla de inicio de sesión. Si aparece “No hay conexión con la BD”, el programa inició correctamente pero no logra abrir la conexión configurada.</p>
+
+<h1 class="pagina">3. Acceso, registro y sesión</h1>
+<h2>3.1 Iniciar sesión</h2>
+<figure class="login"><img src="capturas/01-inicio-sesion.png" alt="Pantalla de inicio de sesión"><figcaption>Inicio de sesión con correo electrónico, contraseña y acceso al registro.</figcaption></figure>
+<ol>
+  <li>Escriba el <strong>correo electrónico completo</strong>. El correo no distingue visualmente entre matrícula y nombre; use exactamente el registrado.</li>
+  <li>Escriba la contraseña. El campo oculta los caracteres.</li>
+  <li>Pulse <strong>Iniciar Sesión</strong> o presione Enter.</li>
+  <li>Compruebe el mensaje de bienvenida y el panel del rol.</li>
+</ol>
+<table>
+  <tr><th>Condición</th><th>Mensaje/resultado esperado</th><th>Acción</th></tr>
+  <tr><td>Uno o ambos campos vacíos</td><td>“Por favor, completa ambos campos para ingresar”.</td><td>Complete los dos campos.</td></tr>
+  <tr><td>Correo o contraseña incorrectos</td><td>“El correo electrónico o la contraseña son incorrectas”.</td><td>Verifique mayúsculas, espacios y cuenta.</td></tr>
+  <tr><td>Base inaccesible</td><td>“No hay conexión con la BD”.</td><td>Avise al responsable técnico; no intente registrar datos.</td></tr>
+  <tr><td>Rol Externo</td><td>Mensaje “INTERFAZ EXTERNO”.</td><td>Es una limitación conocida de esta versión.</td></tr>
+</table>
+
+<h2>3.2 Registrar una cuenta</h2>
+<figure class="login"><img src="capturas/02-registro.png" alt="Pantalla de registro"><figcaption>Formulario inicial de registro; los datos específicos del rol se solicitan después.</figcaption></figure>
+<ol>
+  <li>Desde el acceso, pulse <strong>Registro</strong>.</li>
+  <li>Capture nombre, apellido paterno, apellido materno, correo y contraseña. En esta versión los tres componentes del nombre son obligatorios.</li>
+  <li>Seleccione Estudiante, Profesor, Laboratorista o Externo.</li>
+  <li>Pulse <strong>Registrarse</strong> y complete los diálogos adicionales:</li>
+</ol>
+<table>
+  <tr><th>Rol</th><th>Dominio requerido</th><th>Datos adicionales</th></tr>
+  <tr><td>Estudiante</td><td><code>@soy.utj.edu.mx</code></td><td>Matrícula (10 dígitos), carrera y turno.</td></tr>
+  <tr><td>Profesor</td><td><code>@utj.edu.mx</code></td><td>No solicita perfil adicional.</td></tr>
+  <tr><td>Laboratorista</td><td><code>@utj.edu.mx</code></td><td>Turno y pisos encargados.</td></tr>
+  <tr><td>Externo</td><td>Sin restricción institucional en el formulario</td><td>Institución de origen y motivo de visita.</td></tr>
+</table>
+<div class="callout"><strong>Atomicidad del registro:</strong> la cuenta general y su perfil se guardan juntos. Si falla el perfil, se revierte la cuenta para evitar registros incompletos.</div>
+
+<h2>3.3 Cerrar sesión</h2>
+<p>Pulse <strong>Cerrar Sesión</strong> en el encabezado. Confirme cuando la aplicación lo solicite. Debe volver al acceso y dejar de actualizar la ventana anterior. Nunca cierre una sesión compartida dejando el equipo desbloqueado.</p>
+
+<h1 class="pagina">4. Operación como estudiante</h1>
+<h2>4.1 Panel del estudiante</h2>
+<figure><img src="capturas/03-panel-alumno.png" alt="Panel del estudiante"><figcaption>Resumen de reservas activas, próxima reserva, reportes y accesos principales.</figcaption></figure>
+<p>El panel resume reservas activas, próxima reserva, reportes pendientes y próximas reservaciones. El menú lateral ofrece <strong>Reservar</strong>, <strong>Mis reservas</strong> y <strong>Reporte de fallas</strong>. Los valores se actualizan periódicamente; espere unos segundos antes de concluir que un cambio no se guardó.</p>
+
+<h2>4.2 Solicitar una reserva individual</h2>
+<figure><img src="capturas/04-reservas-alumno.png" alt="Reserva de estudiante"><figcaption>Consulta de equipos disponibles y resumen de la solicitud individual.</figcaption></figure>
+<ol>
+  <li>Abra <strong>Reservar</strong>.</li>
+  <li>Seleccione una fecha habilitada. Evite fechas pasadas o fuera de la política mostrada por el calendario.</li>
+  <li>Seleccione el bloque horario y, si desea limitar la búsqueda, un laboratorio.</li>
+  <li>Escriba una actividad o motivo concreto: materia, práctica o proyecto.</li>
+  <li>Pulse <strong>Buscar disponibilidad</strong>.</li>
+  <li>Revise laboratorio, horario, equipos disponibles, estado y acción. Seleccione una fila disponible.</li>
+  <li>Compruebe el resumen y pulse <strong>Solicitar reserva</strong>.</li>
+  <li>Espere la confirmación. La nueva reserva debe aparecer como <strong>Pendiente</strong>.</li>
+</ol>
+<div class="callout warning"><strong>No duplique la solicitud:</strong> si el botón tarda, espere la confirmación y revise “Mis reservas”. La capacidad puede cambiar entre búsqueda y guardado; el sistema vuelve a validar antes de insertar.</div>
+
+<h3>Resultado esperado</h3>
+<ul class="resultado">
+  <li>Se guarda la identidad de la sesión; no se solicita el nombre manualmente.</li>
+  <li>La cantidad es una estación/equipo para el estudiante.</li>
+  <li>El estado inicial es Pendiente.</li>
+  <li>El laboratorista recibe una alerta de reserva pendiente.</li>
+</ul>
+
+<h2>4.3 Consultar “Mis reservas”</h2>
+<p>Use <strong>Mis reservas</strong> en el menú. La vista de reservaciones se reutiliza para consultar el historial de la cuenta. Verifique fecha, horario, laboratorio, actividad y estado. Una reserva Aprobada autoriza el uso; Pendiente aún requiere resolución; Rechazada/Cancelada no ocupa; Finalizada ya fue cerrada.</p>
+
+<h2>4.4 Reportar una falla</h2>
+<figure><img src="capturas/05-fallas-alumno.png" alt="Reporte de falla de estudiante"><figcaption>Alta de una falla y listado de reportes recientes de la cuenta.</figcaption></figure>
+<ol>
+  <li>Abra <strong>Reporte de fallas</strong>.</li>
+  <li>Seleccione laboratorio y fecha del reporte.</li>
+  <li>Capture el código del equipo cuando exista. El código ayuda a relacionar inventario y mantenimiento.</li>
+  <li>Seleccione el tipo de falla.</li>
+  <li>Describa síntomas, momento, mensajes observados y acciones ya intentadas. No escriba contraseñas.</li>
+  <li>Pulse <strong>Enviar reporte</strong>.</li>
+  <li>Compruebe el alta en <strong>Mis reportes recientes</strong>. Use <strong>Ver detalle</strong> para revisar el seguimiento.</li>
+</ol>
+<p>Ejemplo útil: “M-01, equipo CCD-014; al abrir NetBeans se cierra después de cargar el proyecto; ocurrió 10:35; reinicio sin mejora”. Evite “no sirve”, porque no permite reproducir la falla.</p>
+
+<h1 class="pagina">5. Operación como profesor</h1>
+<h2>5.1 Panel del profesor</h2>
+<figure><img src="capturas/06-panel-profesor.png" alt="Panel del profesor"><figcaption>Indicadores, reservaciones próximas y guía del perfil profesor.</figcaption></figure>
+<p>El menú contiene Inicio, Reservar, Mis reservas, Bitácora y Reportar falla. El panel muestra reservas activas, próxima reserva, reportes pendientes y el historial próximo.</p>
+
+<h2>5.2 Solicitar una reserva extraordinaria de grupo</h2>
+<figure><img src="capturas/07-reservas-profesor.png" alt="Reserva extraordinaria del profesor"><figcaption>Formulario de reserva exclusiva del laboratorio.</figcaption></figure>
+<p>Las clases regulares se administran en Horarios y no se vuelven a reservar. Este formulario es para mentorías, reposiciones, asesorías o actividades fuera del horario regular.</p>
+<ol>
+  <li>Seleccione fecha, horario y laboratorio.</li>
+  <li>Capture actividad/materia, carrera, turno, grado, grupo y número de personas.</li>
+  <li>En observaciones indique software requerido, preparación o necesidades especiales.</li>
+  <li>Pulse <strong>Consultar</strong>. Solo continúe si el indicador confirma disponibilidad.</li>
+  <li>Pulse <strong>Enviar solicitud</strong>. El estado inicial es Pendiente.</li>
+</ol>
+<p>La cantidad de personas no puede superar la capacidad del laboratorio. Una reserva de profesor no comparte horario con reservas individuales. Si modifica fecha, horario o laboratorio después de consultar, la confirmación de disponibilidad se invalida y debe consultar otra vez.</p>
+
+<h2>5.3 Consultar, detallar y cancelar reservas</h2>
+<figure><img src="capturas/08-mis-reservas-profesor.png" alt="Mis reservas del profesor"><figcaption>Filtros, historial y acciones sobre una reserva seleccionada.</figcaption></figure>
+<ol>
+  <li>Abra <strong>Mis reservas</strong>.</li>
+  <li>Use búsqueda libre, estado y laboratorio; pulse <strong>Filtrar</strong>.</li>
+  <li>Seleccione una fila y pulse <strong>Ver detalle</strong>.</li>
+  <li>Para retirar una solicitud válida, pulse <strong>Cancelar reserva</strong> y confirme. Compruebe el estado Cancelada.</li>
+  <li>Para una reserva aprobada pendiente de bitácora, pulse <strong>Ir a bitácora</strong>.</li>
+</ol>
+<div class="callout warning">La cancelación es un cambio de estado, no un borrado. El registro permanece para auditoría. Si el botón está deshabilitado, el estado seleccionado no permite la transición.</div>
+
+<h2>5.4 Registrar la bitácora</h2>
+<figure><img src="capturas/09-bitacora-profesor.png" alt="Bitácora del profesor"><figcaption>Selección de una clase regular del día o reserva aprobada y captura del uso real.</figcaption></figure>
+<ol>
+  <li>Abra <strong>Bitácora</strong>.</li>
+  <li>Pulse <strong>Actualizar</strong> si no aparece la sesión esperada.</li>
+  <li>Seleccione una clase del día o una reserva extraordinaria aprobada pendiente de registro.</li>
+  <li>Verifique los datos automáticos: fecha, laboratorio, horario, profesor, rol, turno, carrera, grado, grupo y actividad.</li>
+  <li>Capture el total real de personas y observaciones operativas.</li>
+  <li>Pulse <strong>Guardar en bitácora</strong>.</li>
+</ol>
+<p>Una clase regular se identifica por horario y fecha; una reserva por su identificador. No se debe registrar dos veces la misma sesión. La bitácora guarda una fotografía textual para que cambios futuros en horarios o nombres no alteren el historial.</p>
+
+<h2>5.5 Reportar falla como profesor</h2>
+<figure><img src="capturas/10-fallas-profesor.png" alt="Reporte de falla del profesor"><figcaption>Formulario y reportes recientes del profesor.</figcaption></figure>
+<p>El procedimiento es equivalente al del estudiante: fecha, laboratorio, código de equipo, tipo y descripción. Use el código correcto y describa si el problema afecta un equipo o todo el laboratorio. El laboratorista podrá relacionar el reporte con mantenimiento.</p>
+
+<h1 class="pagina">6. Operación como laboratorista</h1>
+<h2>6.1 Panel de control</h2>
+<figure><img src="capturas/11-panel-laboratorista.png" alt="Panel del laboratorista"><figcaption>Indicadores de reservas, fallas, mantenimiento, bitácora y accesos de administración.</figcaption></figure>
+<p>El panel reúne reservaciones pendientes, equipos con fallas, mantenimientos pendientes, últimos registros de bitácora y mantenimientos. El menú lateral centraliza Bitácora, Inventario, Mantenimiento, Ciclos y horarios, Reservas y Reporte de fallas.</p>
+
+<h2>6.2 Gestionar reservas</h2>
+<figure><img src="capturas/12-gestion-reservas.png" alt="Gestión de reservas"><figcaption>Filtros, tabla de control y acciones de resolución.</figcaption></figure>
+<ol>
+  <li>Filtre por texto, laboratorio, turno y estado; pulse <strong>Buscar</strong>. <strong>Limpiar</strong> restaura filtros.</li>
+  <li>Seleccione una fila y pulse <strong>Ver detalles</strong>. Verifique solicitante/rol, laboratorio, fecha, horario, cantidad, actividad y observaciones.</li>
+  <li><strong>Aprobar:</strong> el sistema inicia una transacción, bloquea registros relevantes y vuelve a validar capacidad, clase, mantenimiento, fallas y traslapes. Confirme solo si el resultado es positivo.</li>
+  <li><strong>Rechazar:</strong> confirme y registre una observación clara cuando el flujo la solicite.</li>
+  <li><strong>Finalizar:</strong> úselo cuando el periodo de uso terminó y el expediente de la reserva debe cerrarse.</li>
+  <li><strong>Exportar:</strong> guarda las filas visibles según filtros actuales.</li>
+</ol>
+<table>
+  <tr><th>Acción</th><th>Precondición sugerida</th><th>Verificación posterior</th></tr>
+  <tr><td>Aprobar</td><td>Reserva Pendiente, fecha vigente y disponibilidad aún válida.</td><td>Estado Aprobada y alerta al solicitante.</td></tr>
+  <tr><td>Rechazar</td><td>Reserva Pendiente y motivo operativo.</td><td>Estado Rechazada, observación y alerta.</td></tr>
+  <tr><td>Finalizar</td><td>Reserva Aprobada cuyo horario ya se atendió.</td><td>Estado Finalizada; deja de ocupar disponibilidad.</td></tr>
+</table>
+
+<h2>6.3 Consultar y exportar bitácora</h2>
+<figure><img src="capturas/13-bitacora-general.png" alt="Bitácora general"><figcaption>Historial filtrable de usos registrados.</figcaption></figure>
+<p>Filtre por texto y estado, seleccione una fila para <strong>Ver detalles</strong> y use <strong>Exportar</strong> para crear <code>bitacora_labsync.xlsx</code>. El detalle permite confirmar referencias, usuario, grupo, laboratorio, actividad, horario, personas y observaciones.</p>
+
+<h2>6.4 Administrar inventario y software</h2>
+<figure><img src="capturas/14-inventario.png" alt="Inventario"><figcaption>Control de equipos; la pestaña adicional administra software por laboratorio.</figcaption></figure>
+<h3>Equipos</h3>
+<ol>
+  <li>Use búsqueda, laboratorio, estado y tipo para acotar la tabla.</li>
+  <li><strong>Registrar equipo:</strong> capture código único, tipo, marca, modelo, serie, laboratorio, estado, fecha y observaciones. Evite reutilizar códigos dados de baja.</li>
+  <li><strong>Editar:</strong> seleccione una sola fila, modifique y guarde.</li>
+  <li><strong>Dar de baja:</strong> confirme el equipo exacto y documente el motivo. El historial queda con estado Baja.</li>
+  <li><strong>Exportar:</strong> genera <code>inventario_labsync.xlsx</code> con los filtros actuales.</li>
+</ol>
+<h3>Software por laboratorio</h3>
+<p>Abra la pestaña <strong>Software por laboratorio</strong>. Puede filtrar por laboratorio, estado, uso académico o texto; registrar/editar nombre, versiones instalada y objetivo, uso, estado, fecha de revisión y observaciones; y cambiar estado sin borrar el historial.</p>
+<ul>
+  <li><strong>Desactualizado</strong> exige versión objetivo.</li>
+  <li><strong>Pendiente de eliminación</strong> exige observaciones.</li>
+  <li>El nombre es único dentro del laboratorio, no necesariamente en todo el sistema.</li>
+  <li><strong>Eliminado</strong> conserva el registro; no elimina físicamente la fila.</li>
+</ul>
+
+<h2>6.5 Gestionar mantenimiento</h2>
+<figure><img src="capturas/15-mantenimiento.png" alt="Gestión de mantenimiento"><figcaption>Filtros y acciones para programar, editar, realizar, cancelar y exportar.</figcaption></figure>
+<ol>
+  <li>Filtre por código/nombre/responsable, tipo, estado y laboratorio.</li>
+  <li>Pulse <strong>Registrar Mantenimiento</strong>. Seleccione equipo/código, tipo, fecha programada, responsable, estado y observaciones.</li>
+  <li>Use <strong>Editar</strong> para corregir una programación seleccionada.</li>
+  <li>Use <strong>Marcar realizado</strong> tras comprobar la intervención; no antes.</li>
+  <li>Use <strong>Cancelar Mant.</strong> cuando la programación no se realizará.</li>
+  <li>Exporte a <code>mantenimiento_labsync.xlsx</code>.</li>
+</ol>
+<table>
+  <tr><th>Tipo</th><th>Regla al realizar</th></tr>
+  <tr><td>Preventivo, Correctivo, Actualización de software, Actualización de hardware</td><td>El equipo vuelve a Disponible y se actualiza la fecha de último mantenimiento.</td></tr>
+  <tr><td>Disposición de material peligroso</td><td>Requiere observaciones y deja el inventario en Baja, conservando historial.</td></tr>
+  <tr><td>Retiro de equipo obsoleto</td><td>Requiere observaciones y deja el inventario en Baja, conservando historial.</td></tr>
+</table>
+<div class="callout danger"><strong>Seguridad física:</strong> LabSync registra y avisa; no prescribe cómo manipular baterías, tóner, residuos electrónicos ni sustancias peligrosas. Siga los procedimientos institucionales y normativos fuera del sistema.</div>
+
+<h2>6.6 Atender reportes de falla</h2>
+<figure><img src="capturas/16-gestion-fallas.png" alt="Gestión de fallas"><figcaption>Consulta, revisión, resolución, cancelación y exportación de reportes.</figcaption></figure>
+<ol>
+  <li>Filtre por texto, laboratorio, estado y prioridad.</li>
+  <li>Seleccione y pulse <strong>Ver detalles</strong>. Corrobore equipo, laboratorio, reportante, prioridad, descripción y observaciones.</li>
+  <li><strong>En revisión</strong> indica atención activa y bloquea la disponibilidad del laboratorio relacionado.</li>
+  <li><strong>Marcar atendida</strong> cierra el reporte cuando existe evidencia de solución.</li>
+  <li><strong>Cancelar</strong> se usa para duplicados o reportes improcedentes; conserve el motivo.</li>
+  <li>Cuando requiera intervención técnica, derive el equipo al módulo de mantenimiento según la acción disponible en el detalle.</li>
+</ol>
+
+<h2>6.7 Administrar ciclos y horarios regulares</h2>
+<figure><img src="capturas/17-horarios.png" alt="Administración de horarios"><figcaption>Pestañas de horarios y ciclos, filtros, edición y activación.</figcaption></figure>
+<h3>Ciclos escolares</h3>
+<ol>
+  <li>Abra la pestaña <strong>Ciclos escolares</strong>.</li>
+  <li>Cree un ciclo con nombre único, fecha inicial y fecha final; el final no puede preceder al inicio.</li>
+  <li>Active únicamente los ciclos que deben intervenir en consultas operativas.</li>
+</ol>
+<h3>Horarios de laboratorio</h3>
+<ol>
+  <li>Pulse <strong>Nueva asignación</strong>.</li>
+  <li>Seleccione ciclo, carrera, cuatrimestre, grupo, turno, materia, profesor, laboratorio, día, hora inicial y final.</li>
+  <li>Guarde y confirme que aparece en la tabla.</li>
+  <li>Use <strong>Editar</strong>, <strong>Activar/Desactivar</strong> y <strong>Actualizar</strong> sobre una selección explícita.</li>
+</ol>
+<p>El sistema rechaza traslapes del mismo ciclo/día si coincide el laboratorio, el profesor o la identidad completa del grupo (carrera + cuatrimestre + grupo + turno). Las horas válidas corresponden a los módulos institucionales y deben permanecer dentro del turno.</p>
+
+<h1 class="pagina">7. Alertas y actualización automática</h1>
+<p>La campana del encabezado muestra el número de alertas no atendidas. El centro de alertas distingue prioridad y permite leer el detalle o ir al módulo de resolución. LabSync genera avisos por reservas pendientes/resueltas, fallas, equipos que requieren revisión, mantenimiento próximo/vencido y mantenimiento preventivo requerido.</p>
+<ul>
+  <li>Las vistas dinámicas se actualizan aproximadamente cada <strong>7 segundos</strong>.</li>
+  <li>Una alerta Nueva pasa a Leída al consultarla; Atendida significa que el asunto fue resuelto o marcado como tal.</li>
+  <li>La actualización se realiza en segundo plano para no congelar la interfaz.</li>
+  <li>Si aparece <strong>🔔 E</strong> o un guion, revise conexión; no presuponga que no hay alertas.</li>
+</ul>
+
+<h1 class="pagina">8. Exportación a Excel</h1>
+<p>Bitácora, reservas, inventario, mantenimiento y fallas exportan archivos <code>.xlsx</code>. El flujo es común:</p>
+<ol>
+  <li>Aplique los filtros que definen el conjunto de datos.</li>
+  <li>Compruebe que la tabla visible contiene filas.</li>
+  <li>Pulse <strong>Exportar</strong>.</li>
+  <li>Elija carpeta y nombre; si omite <code>.xlsx</code>, se agrega automáticamente.</li>
+  <li>Abra el archivo y confirme título, encabezados, filas, autofiltro y formatos.</li>
+</ol>
+<table>
+  <tr><th>Módulo</th><th>Nombre propuesto</th></tr>
+  <tr><td>Reservas</td><td><code>reservas_labsync.xlsx</code></td></tr>
+  <tr><td>Bitácora</td><td><code>bitacora_labsync.xlsx</code></td></tr>
+  <tr><td>Inventario</td><td><code>inventario_labsync.xlsx</code></td></tr>
+  <tr><td>Mantenimiento</td><td><code>mantenimiento_labsync.xlsx</code></td></tr>
+  <tr><td>Reporte de fallas</td><td><code>reporte_fallas_labsync.xlsx</code></td></tr>
+</table>
+
+<h1 class="pagina">9. Plan de pruebas funcionales</h1>
+<h2>9.1 Preparación</h2>
+<ul class="checklist">
+  <li>Respaldo o base desechable creada.</li>
+  <li>Al menos un usuario Estudiante, Profesor y Laboratorista.</li>
+  <li>Un ciclo activo que incluya la fecha de prueba.</li>
+  <li>Dos laboratorios Disponibles con capacidades conocidas.</li>
+  <li>Un equipo Disponible, uno Con falla y uno En mantenimiento.</li>
+  <li>Carpeta de evidencias y nomenclatura definida.</li>
+  <li>Hora/fecha del equipo correcta.</li>
+</ul>
+
+<h2>9.2 Casos de humo (P0)</h2>
+<table class="compact">
+  <tr><th>ID</th><th>Procedimiento resumido</th><th>Resultado esperado</th></tr>
+  <tr><td>USR-001</td><td>Iniciar con credenciales válidas de cada rol.</td><td>Panel correcto, nombre de sesión y menú permitido.</td></tr>
+  <tr><td>USR-002</td><td>Usar contraseña errónea.</td><td>Error de autenticación; no abre panel.</td></tr>
+  <tr><td>RES-001</td><td>Estudiante solicita equipo en intervalo libre.</td><td>Reserva Pendiente y alerta al laboratorista.</td></tr>
+  <tr><td>RES-002</td><td>Profesor solicita laboratorio libre.</td><td>Reserva Pendiente con datos académicos.</td></tr>
+  <tr><td>RES-003</td><td>Laboratorista aprueba solicitud aún disponible.</td><td>Aprobada y alerta al solicitante.</td></tr>
+  <tr><td>BIT-001</td><td>Profesor registra sesión aprobada o clase del día.</td><td>Entrada única en bitácora y datos históricos completos.</td></tr>
+  <tr><td>FAL-001</td><td>Usuario registra falla y laboratorista la pone En revisión.</td><td>Reporte visible; laboratorio bloqueado para reservas.</td></tr>
+  <tr><td>MAN-001</td><td>Programar mantenimiento de equipo disponible.</td><td>Mantenimiento Pendiente y equipo En mantenimiento.</td></tr>
+  <tr><td>INV-001</td><td>Registrar equipo y buscarlo por código.</td><td>Fila única con datos capturados.</td></tr>
+  <tr><td>HOR-001</td><td>Crear horario válido sin conflicto.</td><td>Asignación activa visible.</td></tr>
+  <tr><td>EXP-001</td><td>Exportar una tabla filtrada.</td><td>XLSX abre y coincide con filas visibles.</td></tr>
+</table>
+
+<h2>9.3 Casos de reglas y bordes (P1)</h2>
+<table class="compact">
+  <tr><th>ID</th><th>Datos/acción</th><th>Validación esperada</th></tr>
+  <tr><td>RES-101</td><td>Reserva que se traslapa con clase regular.</td><td>No disponible; explica que existe clase.</td></tr>
+  <tr><td>RES-102</td><td>Profesor contra reserva individual activa.</td><td>Rechazo por reservas individuales.</td></tr>
+  <tr><td>RES-103</td><td>Estudiantes hasta capacidad y uno adicional.</td><td>Los primeros caben; el adicional informa que no hay equipos.</td></tr>
+  <tr><td>RES-104</td><td>Consultar libre, crear conflicto en otra sesión y aprobar.</td><td>La aprobación revalida y falla sin doble ocupación.</td></tr>
+  <tr><td>RES-105</td><td>Mantenimiento Pendiente con fecha aplicable.</td><td>Bloqueo por mantenimiento.</td></tr>
+  <tr><td>HOR-101</td><td>Mismo profesor en horarios traslapados.</td><td>Conflicto y ninguna fila adicional.</td></tr>
+  <tr><td>HOR-102</td><td>Mismo grupo (carrera/cuatrimestre/grupo/turno) en dos laboratorios.</td><td>Conflicto.</td></tr>
+  <tr><td>HOR-103</td><td>Hora fuera de módulos o turno.</td><td>Mensaje de intervalo inválido.</td></tr>
+  <tr><td>SW-101</td><td>Desactualizado sin versión objetivo.</td><td>No guarda.</td></tr>
+  <tr><td>SW-102</td><td>Pendiente de eliminación sin observaciones.</td><td>No guarda.</td></tr>
+  <tr><td>SW-103</td><td>Mismo nombre en el mismo laboratorio.</td><td>Duplicado rechazado.</td></tr>
+  <tr><td>MAN-101</td><td>Disposición peligrosa sin observaciones.</td><td>No permite guardar/realizar según el punto validado.</td></tr>
+  <tr><td>MAN-102</td><td>Realizar mantenimiento preventivo.</td><td>Equipo Disponible y fecha actualizada.</td></tr>
+  <tr><td>MAN-103</td><td>Realizar retiro obsoleto.</td><td>Equipo Baja, fila conservada.</td></tr>
+</table>
+
+<h2>9.4 Registro de evidencia</h2>
+<table>
+  <tr><th>Campo</th><th>Qué registrar</th></tr>
+  <tr><td>ID y versión</td><td>Caso, versión del JAR, fecha/hora y entorno.</td></tr>
+  <tr><td>Precondiciones</td><td>Usuario/rol, laboratorio, capacidad, estados y datos existentes.</td></tr>
+  <tr><td>Pasos</td><td>Valores exactos y orden de botones.</td></tr>
+  <tr><td>Resultado</td><td>Esperado, observado y estado Pasa/Falla/Bloqueado.</td></tr>
+  <tr><td>Evidencia</td><td>Captura antes/después, identificador de fila y archivo XLSX cuando aplique.</td></tr>
+  <tr><td>Limpieza</td><td>Registros revertidos o base restablecida.</td></tr>
+</table>
+
+<h1 class="pagina">10. Problemas y recuperación</h1>
+<table>
+  <tr><th>Síntoma</th><th>Causa probable</th><th>Qué hacer</th></tr>
+  <tr><td>No abre ninguna ventana</td><td>JRE/JDK ausente, JAR inexistente o sesión sin pantalla.</td><td>Ejecute desde terminal y entregue el error al responsable técnico.</td></tr>
+  <tr><td>No hay conexión con BD</td><td>Servidor detenido, URL/usuario/contraseña incorrectos o red.</td><td>No repita operaciones; verifique servicio y configuración técnica.</td></tr>
+  <tr><td>Tabla vacía tras guardar</td><td>Filtro excluye el registro o actualización aún no ocurrió.</td><td>Limpiar filtros, pulsar Actualizar o esperar 7 segundos.</td></tr>
+  <tr><td>Disponibilidad cambió</td><td>Otra sesión reservó/aprobó o apareció bloqueo.</td><td>Consultar otra vez y elegir otro laboratorio/horario.</td></tr>
+  <tr><td>Botón de acción deshabilitado</td><td>No hay fila seleccionada o el estado no admite transición.</td><td>Seleccione una fila válida y revise su estado.</td></tr>
+  <tr><td>Error al exportar</td><td>Sin filas, carpeta sin permisos o archivo abierto.</td><td>Compruebe datos, elija otra ruta y cierre el XLSX anterior.</td></tr>
+  <tr><td>Campana muestra E</td><td>Error al consultar alertas.</td><td>Revise conexión; cierre y vuelva a abrir tras recuperar el servicio.</td></tr>
+  <tr><td>Texto o controles no caben</td><td>Resolución/escalado reducido.</td><td>Maximice, use resolución ≥1366×768 o reduzca escalado del sistema.</td></tr>
+</table>
+
+<h1 class="pagina">11. Glosario y cierre de prueba</h1>
+<table class="compact">
+  <tr><th>Término</th><th>Definición</th></tr>
+  <tr><td>Clase regular</td><td>Asignación semanal vigente de grupo, profesor y laboratorio.</td></tr>
+  <tr><td>Reserva extraordinaria</td><td>Uso fuera del horario regular que requiere solicitud y resolución.</td></tr>
+  <tr><td>Bitácora</td><td>Historial del uso efectivamente realizado.</td></tr>
+  <tr><td>Traslape</td><td>Intersección temporal entre dos intervalos.</td></tr>
+  <tr><td>Baja</td><td>Estado histórico de inventario retirado; no es eliminación de la fila.</td></tr>
+  <tr><td>Copia de prueba</td><td>Base aislada cuyo contenido puede modificarse y restablecerse.</td></tr>
+</table>
+<h2>Lista de cierre</h2>
+<ul class="checklist">
+  <li>Todos los casos tienen resultado y evidencia.</li>
+  <li>No quedan sesiones abiertas.</li>
+  <li>Los XLSX generados fueron revisados y almacenados.</li>
+  <li>Los datos de prueba se limpiaron o la base se restableció.</li>
+  <li>Los defectos incluyen pasos, valores, captura y severidad.</li>
+  <li>No se divulgaron contraseñas ni datos personales en evidencias.</li>
+</ul>
+
+<p class="pie">Manual de usuario de LabSync 1.0 · Elaborado a partir del código fuente y las pantallas vigentes al 5 de agosto de 2026.</p>
+</body>
+</html>

@@ -13,8 +13,8 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Frame;
 import java.awt.GridLayout;
+import java.awt.Point;
 import java.sql.Connection;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import javax.swing.BorderFactory;
@@ -28,10 +28,13 @@ import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
+import javax.swing.RowFilter;
+import javax.swing.RowSorter;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
 import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 
 /** Ventana compacta para consultar y atender las alertas del laboratorista. */
 public final class DialogoAlertas extends JDialog {
@@ -39,16 +42,16 @@ public final class DialogoAlertas extends JDialog {
     public interface CargadorAlertas {
         List<Alerta> cargar(Connection conexion, boolean sincronizar) throws Exception;
     }
-    private static final DateTimeFormatter FORMATO_FECHA =
-            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     private static final Color VERDE = new Color(8, 173, 141);
     private static final Color FONDO = new Color(245, 247, 249);
 
     private final ServicioAlertas alertaService;
     private final Runnable alActualizar;
     private final java.util.function.Consumer<Alerta> alResolver;
-    private final DefaultTableModel modelo;
+    private final ModeloAlertas modelo;
     private final JTable tabla;
+    private final TableRowSorter<ModeloAlertas> ordenador;
+    private final JScrollPane scrollTabla;
     private final JTextArea detalle = new JTextArea();
     private final JLabel resumen = new JLabel("Cargando alertas...");
     private final JButton btnResolver = new JButton("Ir a resolver");
@@ -73,11 +76,11 @@ public final class DialogoAlertas extends JDialog {
         this.alActualizar = alActualizar;
         this.alResolver = alResolver;
         this.cargador = cargador;
-        modelo = new DefaultTableModel(
-                new Object[]{"Prioridad", "Tipo", "Aviso", "Detectado"}, 0) {
-            @Override public boolean isCellEditable(int row, int column) { return false; }
-        };
+        modelo = new ModeloAlertas();
         tabla = new JTable(modelo);
+        ordenador = new TableRowSorter<>(modelo);
+        tabla.setRowSorter(ordenador);
+        scrollTabla = new JScrollPane(tabla);
         temporizador = new javax.swing.Timer(7_000, e -> cargarAlertas(true));
         temporizador.setInitialDelay(7_000);
         inicializarComponentes();
@@ -117,7 +120,7 @@ public final class DialogoAlertas extends JDialog {
         panelDetalle.setBorder(BorderFactory.createTitledBorder("Detalle"));
         panelDetalle.add(new JScrollPane(detalle), BorderLayout.CENTER);
         JSplitPane contenido = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                new JScrollPane(tabla), panelDetalle);
+                scrollTabla, panelDetalle);
         contenido.setResizeWeight(0.68);
         contenido.setDividerSize(7);
         contenido.setBorder(BorderFactory.createEmptyBorder(0, 14, 0, 14));
@@ -151,7 +154,6 @@ public final class DialogoAlertas extends JDialog {
     private void configurarTabla() {
         tabla.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         tabla.setRowHeight(30);
-        tabla.setAutoCreateRowSorter(true);
         tabla.setFillsViewportHeight(true);
         tabla.setShowVerticalLines(false);
         tabla.getTableHeader().setReorderingAllowed(false);
@@ -183,7 +185,6 @@ public final class DialogoAlertas extends JDialog {
     private void cargarAlertas(boolean sincronizar) {
         if (actualizando) return;
         actualizando = true;
-        establecerOcupado(true, "Actualizando alertas...");
         new SwingWorker<List<Alerta>, Void>() {
             @Override protected List<Alerta> doInBackground() throws Exception {
                 try (Connection conexion = ConexionBaseDatos.conectar()) {
@@ -194,9 +195,7 @@ public final class DialogoAlertas extends JDialog {
 
             @Override protected void done() {
                 try {
-                    alertas = get();
-                    actualizarModelo();
-                    alActualizar.run();
+                    aplicarAlertas(get());
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
                     mostrarError("La actualización fue interrumpida.");
@@ -204,26 +203,55 @@ public final class DialogoAlertas extends JDialog {
                     mostrarError(mensajeDe(ex.getCause()));
                 } finally {
                     actualizando = false;
-                    establecerOcupado(false, null);
                 }
             }
         }.execute();
     }
 
-    private void actualizarModelo() {
-        modelo.setRowCount(0);
+    private void aplicarAlertas(List<Alerta> datosNuevos) {
+        Alerta seleccionada = alertaSeleccionada();
+        Integer idSeleccionada = seleccionada == null ? null : seleccionada.id();
+        Point posicionScroll = scrollTabla.getViewport().getViewPosition();
+        List<? extends RowSorter.SortKey> ordenActual = List.copyOf(ordenador.getSortKeys());
+        RowFilter<? super ModeloAlertas, ? super Integer> filtroActual = ordenador.getRowFilter();
+        int cantidadAnterior = modelo.getRowCount();
+
+        ModeloAlertas.ResultadoActualizacion resultado = modelo.actualizar(datosNuevos);
+        if (!resultado.cambio()) return;
+
+        alertas = modelo.alertas();
+        ordenador.setRowFilter(filtroActual);
+        ordenador.setSortKeys(ordenActual);
         long criticas = alertas.stream().filter(a -> "Crítica".equals(a.prioridad())).count();
-        for (Alerta alerta : alertas) {
-            modelo.addRow(new Object[]{alerta.prioridad(), nombreTipo(alerta.tipo()),
-                alerta.titulo(), alerta.fechaCreacion() == null
-                    ? "" : FORMATO_FECHA.format(alerta.fechaCreacion())});
-        }
         resumen.setText(alertas.isEmpty() ? "No hay acciones pendientes"
                 : alertas.size() + (alertas.size() == 1 ? " aviso activo" : " avisos activos")
                         + (criticas > 0 ? " · " + criticas + " críticos" : ""));
-        detalle.setText(alertas.isEmpty()
-                ? "Todo está al día. Las alertas atendidas permanecen ocultas."
-                : "Selecciona una alerta para consultar su detalle.");
+
+        restaurarSeleccion(idSeleccionada);
+        SwingUtilities.invokeLater(() -> scrollTabla.getViewport().setViewPosition(posicionScroll));
+
+        if (!resultado.nuevas().isEmpty() || cantidadAnterior != modelo.getRowCount()) {
+            // El controlador propietario actualiza el contador y ejecuta su mecanismo
+            // existente de RegistroNotificacionesConocidas, aviso visual y sonido.
+            alActualizar.run();
+        }
+    }
+
+    private void restaurarSeleccion(Integer idAlerta) {
+        if (idAlerta == null) {
+            tabla.clearSelection();
+            mostrarDetalleSeleccionado();
+            return;
+        }
+        int filaModelo = modelo.indicePorId(idAlerta);
+        int filaVista = filaModelo < 0 ? -1 : tabla.convertRowIndexToView(filaModelo);
+        if (filaVista < 0) {
+            tabla.clearSelection();
+            mostrarDetalleSeleccionado();
+            return;
+        }
+        tabla.getSelectionModel().setSelectionInterval(filaVista, filaVista);
+        mostrarDetalleSeleccionado();
     }
 
     private void irAResolver() {
@@ -241,7 +269,7 @@ public final class DialogoAlertas extends JDialog {
         int filaVista = tabla.getSelectedRow();
         if (filaVista < 0) return null;
         int filaModelo = tabla.convertRowIndexToModel(filaVista);
-        return filaModelo < alertas.size() ? alertas.get(filaModelo) : null;
+        return modelo.alertaEn(filaModelo);
     }
 
     private void mostrarDetalleSeleccionado() {
@@ -252,34 +280,8 @@ public final class DialogoAlertas extends JDialog {
         habilitarAcciones(alerta != null);
     }
 
-    private void establecerOcupado(boolean ocupado, String mensaje) {
-        btnActualizar.setEnabled(!ocupado);
-        tabla.setEnabled(!ocupado);
-        if (ocupado) {
-            btnResolver.setEnabled(false);
-            resumen.setText(mensaje);
-        } else {
-            habilitarAcciones(tabla.getSelectedRow() >= 0);
-        }
-    }
-
     private void habilitarAcciones(boolean habilitar) {
         btnResolver.setEnabled(habilitar);
-    }
-
-    private String nombreTipo(String tipo) {
-        return switch (tipo) {
-            case "MANTENIMIENTO_VENCIDO" -> "Mantenimiento vencido";
-            case "MANTENIMIENTO_PROXIMO" -> "Mantenimiento próximo";
-            case "MANTENIMIENTO_REQUERIDO" -> "Mantenimiento requerido";
-            case "SOFTWARE_ACTUALIZACION" -> "Actualizar software";
-            case "FALLA_PENDIENTE" -> "Falla pendiente";
-            case "RESERVA_PENDIENTE" -> "Reserva pendiente";
-            case "RESERVA_APROBADA" -> "Reserva autorizada";
-            case "RESERVA_RECHAZADA" -> "Reserva rechazada";
-            case "EQUIPO_BAJA" -> "Valorar baja";
-            default -> "Revisión de equipo";
-        };
     }
 
     private String mensajeDe(Throwable causa) {

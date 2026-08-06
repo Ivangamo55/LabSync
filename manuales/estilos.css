@@ -1,0 +1,84 @@
+@page {
+  size: Letter;
+  margin: 17mm 16mm 17mm 16mm;
+}
+
+:root {
+  --verde: #08ad8d;
+  --verde-oscuro: #05755f;
+  --tinta: #1e293b;
+  --gris: #64748b;
+  --borde: #cbd5e1;
+  --fondo: #f8fafc;
+  --azul: #eaf7f4;
+  --alerta: #fff7ed;
+  --peligro: #fff1f2;
+}
+
+* { box-sizing: border-box; }
+html { font-family: Arial, Helvetica, sans-serif; color: var(--tinta); font-size: 10.5pt; line-height: 1.42; }
+body { margin: 0; }
+h1, h2, h3, h4 { color: var(--verde-oscuro); page-break-after: avoid; }
+h1 { font-size: 23pt; margin: 0 0 12pt; border-bottom: 3px solid var(--verde); padding-bottom: 7pt; }
+h2 { font-size: 17pt; margin: 20pt 0 8pt; border-bottom: 1px solid var(--borde); padding-bottom: 4pt; }
+h3 { font-size: 13pt; margin: 15pt 0 6pt; }
+h4 { font-size: 11pt; margin: 12pt 0 4pt; }
+p { margin: 5pt 0 8pt; }
+ul, ol { margin: 5pt 0 9pt 18pt; padding-left: 10pt; }
+li { margin: 2.5pt 0; }
+code, pre { font-family: "Liberation Mono", Consolas, monospace; }
+code { color: #0f4f43; background: #eef8f5; padding: 1px 3px; border-radius: 2px; }
+pre { font-size: 8.5pt; line-height: 1.35; white-space: pre-wrap; background: #0f172a; color: #f8fafc; padding: 9pt; border-radius: 5px; page-break-inside: avoid; }
+a { color: var(--verde-oscuro); text-decoration: none; }
+
+.portada {
+  display: block;
+  padding: 20mm 10mm 35mm;
+  border-left: 12mm solid var(--verde);
+  page-break-after: always;
+}
+.portada img.logo { width: 58mm; height: auto; }
+.portada h1 { font-size: 32pt; border: 0; margin: 0; color: var(--verde-oscuro); }
+.portada .subtitulo { font-size: 16pt; color: var(--gris); }
+.portada .meta { border-top: 2px solid var(--verde); padding-top: 8pt; font-size: 10pt; }
+.documento { counter-reset: figure table; }
+.pagina { page-break-before: always; }
+.evitar-corte { page-break-inside: avoid; }
+.salto-despues { page-break-after: always; }
+.muted { color: var(--gris); }
+.small { font-size: 8.5pt; }
+.lead { font-size: 12pt; color: #334155; }
+
+.toc { columns: 2; column-gap: 20pt; }
+.toc ol { list-style-position: inside; margin-left: 0; }
+.toc li { border-bottom: 1px dotted var(--borde); padding: 3pt 0; }
+
+.callout { border-left: 4px solid var(--verde); background: var(--azul); padding: 8pt 10pt; margin: 9pt 0; page-break-inside: avoid; }
+.warning { border-left-color: #f59e0b; background: var(--alerta); }
+.danger { border-left-color: #e11d48; background: var(--peligro); }
+.ok { border-left-color: #16a34a; background: #f0fdf4; }
+.kpi { display: inline-block; min-width: 31%; margin: 0 1% 8pt 0; padding: 8pt; background: var(--fondo); border: 1px solid var(--borde); vertical-align: top; }
+.kpi strong { display: block; color: var(--verde-oscuro); font-size: 16pt; }
+
+table { width: 100%; border-collapse: collapse; margin: 8pt 0 12pt; font-size: 8.7pt; page-break-inside: auto; }
+caption { text-align: left; color: var(--verde-oscuro); font-weight: bold; padding-bottom: 4pt; }
+th { background: var(--verde-oscuro); color: white; text-align: left; }
+th, td { border: 1px solid var(--borde); padding: 4.5pt 5pt; vertical-align: top; }
+tr:nth-child(even) td { background: var(--fondo); }
+tr { page-break-inside: avoid; }
+.compact th, .compact td { padding: 3pt 4pt; }
+
+figure { margin: 10pt auto 14pt; page-break-inside: avoid; text-align: center; counter-increment: figure; }
+figure img { display: block; max-width: 100%; max-height: 172mm; margin: 0 auto; border: 1px solid #94a3b8; }
+figure.login img { max-width: 150mm; }
+figcaption { margin-top: 4pt; font-size: 8.5pt; color: var(--gris); text-align: left; }
+figcaption::before { content: "Figura " counter(figure) ". "; font-weight: bold; color: var(--tinta); }
+
+.flujo { display: flex; flex-wrap: wrap; gap: 5pt; align-items: center; margin: 10pt 0; page-break-inside: avoid; }
+.flujo span { padding: 6pt 8pt; border: 1px solid var(--verde); background: #f0fdfa; border-radius: 4px; }
+.flujo b { color: var(--verde); font-size: 14pt; }
+.diagrama { font-family: "Liberation Mono", Consolas, monospace; background: var(--fondo); border: 1px solid var(--borde); padding: 9pt; white-space: pre-wrap; line-height: 1.45; page-break-inside: avoid; }
+.checklist li { list-style-type: "☐  "; }
+.resultado li { list-style-type: "✓  "; }
+
+.pie { margin-top: 18pt; padding-top: 5pt; border-top: 1px solid var(--borde); color: var(--gris); font-size: 8pt; }

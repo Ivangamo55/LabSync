@@ -11,6 +11,7 @@ import labsync.interfaz.inventario.VentanaGestionInventario;
 import labsync.interfaz.mantenimiento.VentanaGestionMantenimiento;
 import labsync.interfaz.fallas.VentanaGestionReportesFallas;
 import labsync.interfaz.panel.VentanaPanelLaboratorista;
+import labsync.modelo.SesionUsuario;
 
 import java.awt.Color;
 
@@ -37,17 +38,25 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaGestionReservas.class.getName());
     private String nombreUsuario;
+    private SesionUsuario sesion;
     private final String PH_BUSCAR = "Usuario, laboratorio, fecha o estado";
     private final Color COLOR_PLACEHOLDER = new Color(150, 150, 150);
     private final Color COLOR_TEXTO = new Color(51, 51, 51);
+    private volatile FiltrosReservas filtrosAplicados = FiltrosReservas.porDefecto();
     
     public VentanaGestionReservas(String nombreRecibido) {
         initComponents();
+        this.nombreUsuario = nombreRecibido;
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(this, sidebar, header, body);
+        normalizarGeometriaOperativa();
+        configurarPresentacionTablaReservas();
         CatalogoLaboratorios.cargarTodos(cmbLaboratorio, "Todos");
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
-        this.nombreUsuario = nombreRecibido;
+        this.sesion = SesionUsuario.buscarLaboratorista(nombreRecibido);
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         
         ponerPlaceholderBuscar();
         cargarTablaReservas();
@@ -60,22 +69,74 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
 
     public VentanaGestionReservas() {
         initComponents();
+        this.nombreUsuario = "Usuario";
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(this, sidebar, header, body);
+        normalizarGeometriaOperativa();
+        configurarPresentacionTablaReservas();
         CatalogoLaboratorios.cargarTodos(cmbLaboratorio, "Todos");
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
-        this.nombreUsuario = "Usuario";
+        this.sesion = new SesionUsuario(0, "Usuario", "Usuario", "Laboratorista");
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         
         ponerPlaceholderBuscar();
         cargarTablaReservas();
         iniciarActualizacionAutomatica();
     }
 
+    public VentanaGestionReservas(SesionUsuario sesionRecibida) {
+        this(sesionRecibida == null ? "Usuario" : sesionRecibida.getNombre());
+        if (sesionRecibida != null) this.sesion = sesionRecibida;
+    }
+
     private void iniciarActualizacionAutomatica() {
-        new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT r.id_reserva,DATE_FORMAT(r.fecha,'%Y-%m-%d') fecha,CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante,l.nombre AS laboratorio,r.actividad,r.grupo,r.turno,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.estado,IFNULL(r.observaciones,'') observaciones FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio WHERE r.estado<>'Cancelada' ORDER BY r.fecha DESC,r.hora_inicio",
-                new String[]{"ID", "Fecha", "Maestro", "Laboratorio", "Actividad", "Grupo", "Turno", "Horario", "Estado", "Observaciones"},
-                new String[]{"id_reserva", "fecha", "nombre_solicitante", "laboratorio", "actividad", "grupo", "turno", "horario", "estado", "observaciones"}),
-                modelo -> { tablaReservas.setModel(modelo); ocultarColumnaID(); });
+        new ActualizacionAutomatica<>(this, 7_000,
+                () -> {
+                    FiltrosReservas filtros = filtrosAplicados;
+                    return new ResultadoReservas(filtros, consultarReservas(filtros));
+                },
+                resultado -> {
+                    if (resultado.filtros().equals(filtrosAplicados)) {
+                        aplicarModeloReservas(resultado.modelo());
+                    }
+                });
+    }
+
+    private void aplicarModeloReservas(javax.swing.table.DefaultTableModel modelo) {
+        labsync.interfaz.comun.ActualizadorModeloTabla.aplicar(
+                tablaReservas, modelo, 0, this::configurarColumnasTablaReservas);
+    }
+
+    private void configurarPresentacionTablaReservas() {
+        labsync.interfaz.comun.EstiloTablaLaboratorista.aplicar(tablaReservas);
+        configurarColumnasTablaReservas();
+    }
+
+    private void normalizarGeometriaOperativa() {
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarSidebar(sidebar);
+        javax.swing.JPanel barraFiltros = labsync.interfaz.comun.LayoutLaboratorista.normalizarHeaderOperativo(
+                header, lbTitulo, txtBuscar,
+                new java.awt.Component[]{cmbLaboratorio, cmbTurno, cmbEstado},
+                new java.awt.Component[]{lbLaboratorio, lbTurno, lbEstado},
+                btnLimpiar, btnBuscar);
+        labsync.interfaz.comun.LayoutLaboratorista.restaurarHeaderIdentidad(
+                this, header, lbTitulo, nombreUsuario);
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarBodyOperativo(
+                body, jScrollPane1, barraFiltros,
+                java.util.List.of(btnVerDetalles, btnAprobar, btnRechazar, btnFinalizar),
+                btnExportar);
+    }
+
+    private void configurarColumnasTablaReservas() {
+        tablaReservas.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_OFF);
+        int[] anchos = {0, 105, 190, 120, 200, 80, 100, 120, 115, 220};
+        for (int i = 1; i < anchos.length && i < tablaReservas.getColumnCount(); i++) {
+            javax.swing.table.TableColumn columna = tablaReservas.getColumnModel().getColumn(i);
+            columna.setPreferredWidth(anchos[i]);
+            columna.setMinWidth(i == 4 || i == 9 ? 140 : Math.min(anchos[i], 75));
+        }
+        ocultarColumnaID();
     }
     
     private void ponerPlaceholderBuscar() {
@@ -102,102 +163,28 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
     }
     
     private void cargarTablaReservas() {
-        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel();
-
-        modelo.addColumn("ID");
-        modelo.addColumn("Fecha");
-        modelo.addColumn("Maestro");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Actividad");
-        modelo.addColumn("Grupo");
-        modelo.addColumn("Turno");
-        modelo.addColumn("Horario");
-        modelo.addColumn("Estado");
-        modelo.addColumn("Observaciones");
-
-        String sql = "SELECT r.id_reserva, "
-            + "DATE_FORMAT(r.fecha, '%Y-%m-%d') AS fecha, "
-            + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante,l.nombre AS laboratorio,r.actividad,r.grupo,r.turno,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.estado, "
-            + "IFNULL(r.observaciones, '') AS observaciones "
-            + "FROM reservas r JOIN usuario u ON u.id=r.id_usuario JOIN laboratorios l ON l.id_laboratorio=r.id_laboratorio "
-            + "WHERE r.estado <> 'Cancelada' ORDER BY r.fecha DESC";
-
-        java.sql.Connection con = ConexionBaseDatos.conectar();
-
-        if (con == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return;
-        }
-
-        try {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            java.sql.ResultSet rs = ps.executeQuery();
-
-            while (rs.next()) {
-                Object[] fila = new Object[10];
-
-                fila[0] = rs.getInt("id_reserva");
-                fila[1] = rs.getString("fecha");
-                fila[2] = rs.getString("nombre_solicitante");
-                fila[3] = rs.getString("laboratorio");
-                fila[4] = rs.getString("actividad");
-                fila[5] = rs.getString("grupo");
-                fila[6] = rs.getString("turno");
-                fila[7] = rs.getString("horario");
-                fila[8] = rs.getString("estado");
-                fila[9] = rs.getString("observaciones");
-
-                modelo.addRow(fila);
-            }
-
-            tablaReservas.setModel(modelo);
-            ocultarColumnaID();
-
-        } catch (java.sql.SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Error al cargar reservas: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-
-        } finally {
-            try {
-                con.close();
-            } catch (java.sql.SQLException ex) {
-            }
-        }
+        cargarTablaReservasFiltrada();
     }
     
     private void cargarTablaReservasFiltrada() {
-        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel();
-        
-        modelo.addColumn("ID");
-        modelo.addColumn("Fecha");
-        modelo.addColumn("Maestro");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Actividad");
-        modelo.addColumn("Grupo");
-        modelo.addColumn("Turno");
-        modelo.addColumn("Horario");
-        modelo.addColumn("Estado");
-        modelo.addColumn("Observaciones");
-        
-        String textoBusqueda = txtBuscar.getText().trim();
-        
-        if (textoBusqueda.equals(PH_BUSCAR)) {
-            textoBusqueda = "";
+        filtrosAplicados = capturarFiltrosReservas();
+        try {
+            aplicarModeloReservas(consultarReservas(filtrosAplicados));
+        } catch (IllegalStateException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Error al filtrar reservas: " + ex.getMessage(),
+                    "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
         }
-        
-        String laboratorioSeleccionado = cmbLaboratorio.getSelectedItem().toString();
-        String turnoSeleccionado = cmbTurno.getSelectedItem().toString();
-        String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
-        
+    }
+
+    private FiltrosReservas capturarFiltrosReservas() {
+        String textoBusqueda = txtBuscar.getText().trim();
+        if (textoBusqueda.equals(PH_BUSCAR)) textoBusqueda = "";
+        return new FiltrosReservas(textoBusqueda, cmbLaboratorio.getSelectedItem().toString(),
+                cmbTurno.getSelectedItem().toString(), cmbEstado.getSelectedItem().toString());
+    }
+
+    static javax.swing.table.DefaultTableModel consultarReservas(FiltrosReservas filtros) {
         String sql = "SELECT r.id_reserva, "
             + "DATE_FORMAT(r.fecha, '%Y-%m-%d') AS fecha, "
             + "CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) nombre_solicitante,l.nombre AS laboratorio,r.actividad,r.grupo,r.turno,CONCAT(TIME_FORMAT(r.hora_inicio,'%H:%i'),' - ',TIME_FORMAT(r.hora_fin,'%H:%i')) horario,r.estado, "
@@ -206,88 +193,46 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
         
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
-        if (!textoBusqueda.isEmpty()) {
+        if (!filtros.texto().isEmpty()) {
             sql += "AND (CONCAT_WS(' ',u.nombre,u.apellido_p,u.apellido_m) LIKE ? OR r.actividad LIKE ? OR r.grupo LIKE ? OR l.nombre LIKE ?) ";
-            String busqueda = "%" + textoBusqueda + "%";
+            String busqueda = "%" + filtros.texto() + "%";
             parametros.add(busqueda);
             parametros.add(busqueda);
             parametros.add(busqueda);
             parametros.add(busqueda);
         }
         
-        if (!laboratorioSeleccionado.equals("Todos")) {
+        if (!filtros.laboratorio().equals("Todos")) {
             sql += "AND l.nombre = ? ";
-            parametros.add(laboratorioSeleccionado);
+            parametros.add(filtros.laboratorio());
         }
-
-        if (!turnoSeleccionado.equals("Todos")) {
+        if (!filtros.turno().equals("Todos")) {
             sql += "AND r.turno = ? ";
-            parametros.add(turnoSeleccionado);
+            parametros.add(filtros.turno());
         }
-
-        if (!estadoSeleccionado.equals("Todos")) {
+        if (!filtros.estado().equals("Todos")) {
             sql += "AND r.estado = ? ";
-            parametros.add(estadoSeleccionado);
+            parametros.add(filtros.estado());
         } else {
             sql += "AND r.estado NOT IN ('Finalizada', 'Cancelada') ";
         }
         
         sql += "ORDER BY fecha DESC";
         
-        java.sql.Connection con = ConexionBaseDatos.conectar();
-        
-        if (con == null) {
-           javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            ); 
-           return;
-        }
-        
-        try {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            
-            for (int i = 0; i < parametros.size(); i++) {
-                ps.setString(i + 1, parametros.get(i));
-            }
-            
-            java.sql.ResultSet rs = ps.executeQuery();
-            
-            while (rs.next()) {
-                Object[] fila = new Object[10];
-                
-                fila[0] = rs.getInt("id_reserva");
-                fila[1] = rs.getString("fecha");
-                fila[2] = rs.getString("nombre_solicitante");
-                fila[3] = rs.getString("laboratorio");
-                fila[4] = rs.getString("actividad");
-                fila[5] = rs.getString("grupo");
-                fila[6] = rs.getString("turno");
-                fila[7] = rs.getString("horario");
-                fila[8] = rs.getString("estado");
-                fila[9] = rs.getString("observaciones");
-                
-                modelo.addRow(fila);
-            }
-            tablaReservas.setModel(modelo);
-            ocultarColumnaID();
-        } catch (java.sql.SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Error al filtrar reservas: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (java.sql.SQLException ex) {
-                
-            }
+        return ConsultaTabla.ejecutar(sql,
+                new String[]{"ID", "Fecha", "Maestro", "Laboratorio", "Actividad", "Grupo", "Turno", "Horario", "Estado", "Observaciones"},
+                new String[]{"id_reserva", "fecha", "nombre_solicitante", "laboratorio", "actividad", "grupo", "turno", "horario", "estado", "observaciones"},
+                ps -> { for (int i = 0; i < parametros.size(); i++) ps.setString(i + 1, parametros.get(i)); });
+    }
+
+    record FiltrosReservas(String texto, String laboratorio, String turno, String estado) {
+        static FiltrosReservas porDefecto() {
+            return new FiltrosReservas("", "Todos", "Todos", "Todos");
         }
     }
+
+    private record ResultadoReservas(FiltrosReservas filtros,
+            javax.swing.table.DefaultTableModel modelo) { }
     
     private void ocultarColumnaID() {
         if (tablaReservas.getColumnModel().getColumnCount() > 0) {
@@ -1228,35 +1173,23 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void btnInicioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInicioActionPerformed
-        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(nombreUsuario);
-        
-        ventanaDashboard.setVisible(true);
-        ventanaDashboard.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaDashboard);
     }//GEN-LAST:event_btnInicioActionPerformed
 
     private void btnBitacoraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBitacoraActionPerformed
-        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(nombreUsuario);
-        
-        ventanaBitacora.setVisible(true);
-        ventanaBitacora.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaBitacora);
     }//GEN-LAST:event_btnBitacoraActionPerformed
 
     private void btnInventarioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInventarioActionPerformed
-        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(nombreUsuario);
-    
-        ventanaInventario.setVisible(true);
-        ventanaInventario.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaInventario);
     }//GEN-LAST:event_btnInventarioActionPerformed
 
     private void btnMantenimientoActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnMantenimientoActionPerformed
-        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(nombreUsuario);
-        
-        ventanaMant.setVisible(true);
-        ventanaMant.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaMant);
     }//GEN-LAST:event_btnMantenimientoActionPerformed
 
     private void btnBuscarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBuscarActionPerformed
@@ -1431,11 +1364,8 @@ public class VentanaGestionReservas extends javax.swing.JFrame {
     }//GEN-LAST:event_btnFinalizarActionPerformed
 
     private void btnReporteFallasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReporteFallasActionPerformed
-        VentanaGestionReportesFallas ventanaReporte = new VentanaGestionReportesFallas(nombreUsuario);
-        
-        ventanaReporte.setVisible(true);
-        ventanaReporte.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReportesFallas ventanaReporte = new VentanaGestionReportesFallas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReporte);
     }//GEN-LAST:event_btnReporteFallasActionPerformed
 
     private void btnExportarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarActionPerformed

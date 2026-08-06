@@ -170,7 +170,7 @@
                   <Color blue="66" green="66" red="66" type="rgb"/>
                 </Property>
                 <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
-                  <StringArray count="9">
+                  <StringArray count="14">
                     <StringItem index="0" value="Selecciona"/>
                     <StringItem index="1" value="Computadora"/>
                     <StringItem index="2" value="Monitor"/>
@@ -179,7 +179,12 @@
                     <StringItem index="5" value="Proyector"/>
                     <StringItem index="6" value="Extensi&#xf3;n"/>
                     <StringItem index="7" value="HDMI"/>
-                    <StringItem index="8" value="Otro"/>
+                    <StringItem index="8" value="Material peligroso"/>
+                    <StringItem index="9" value="Bater&#xed;a"/>
+                    <StringItem index="10" value="Bater&#xed;a de UPS"/>
+                    <StringItem index="11" value="T&#xf3;ner"/>
+                    <StringItem index="12" value="Residuo electr&#xf3;nico"/>
+                    <StringItem index="13" value="Otro"/>
                   </StringArray>
                 </Property>
                 <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">
@@ -849,7 +854,7 @@
               <Color blue="66" green="66" red="66" type="rgb"/>
             </Property>
             <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
-              <StringArray count="9">
+              <StringArray count="14">
                 <StringItem index="0" value="Todos"/>
                 <StringItem index="1" value="Computadora"/>
                 <StringItem index="2" value="Monitor"/>
@@ -858,7 +863,12 @@
                 <StringItem index="5" value="Proyector"/>
                 <StringItem index="6" value="Extensi&#xf3;n"/>
                 <StringItem index="7" value="HDMI"/>
-                <StringItem index="8" value="Otro"/>
+                <StringItem index="8" value="Material peligroso"/>
+                <StringItem index="9" value="Bater&#xed;a"/>
+                <StringItem index="10" value="Bater&#xed;a de UPS"/>
+                <StringItem index="11" value="T&#xf3;ner"/>
+                <StringItem index="12" value="Residuo electr&#xf3;nico"/>
+                <StringItem index="13" value="Otro"/>
               </StringArray>
             </Property>
             <Property name="border" type="javax.swing.border.Border" editor="org.netbeans.modules.form.editors2.BorderEditor">

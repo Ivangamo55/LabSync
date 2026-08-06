@@ -2,12 +2,14 @@ package labsync.servicio;
 
 import labsync.modelo.Alerta;
 import labsync.persistencia.RepositorioAlertas;
-import labsync.interfaz.mantenimiento.VentanaGestionMantenimiento;
+import labsync.modelo.TiposMantenimiento;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /** Genera y administra las alertas automáticas del laboratorista. */
@@ -93,16 +95,15 @@ public final class ServicioAlertas {
                     boolean vencido = dias < 0;
                     String equipo = nombreEquipo(rs.getString("codigo_equipo"), rs.getString("nombre_equipo"));
                     String tipoMantenimiento = rs.getString("tipo_mantenimiento");
-                    boolean actualizacion = tipoMantenimiento != null
-                            && tipoMantenimiento.toLowerCase().contains("actualiz");
-                    alertaDAO.guardarGenerada(conexion,
-                            actualizacion ? "SOFTWARE_ACTUALIZACION"
-                                    : (vencido ? "MANTENIMIENTO_VENCIDO" : "MANTENIMIENTO_PROXIMO"),
+                    DatosAlertaMantenimiento alerta = describirMantenimiento(
+                            tipoMantenimiento, vencido);
+                    alertaDAO.guardarGenerada(conexion, null, null,
+                            rs.getInt("id_mantenimiento"), null,
+                            alerta.tipoAlerta(),
                             String.valueOf(rs.getInt("id_mantenimiento")),
-                            actualizacion ? (vencido ? "Actualización de software vencida"
-                                    : "Actualización de software próxima")
-                                    : (vencido ? "Mantenimiento vencido" : "Mantenimiento próximo"),
-                            equipo + " en " + rs.getString("laboratorio") + " · "
+                            alerta.titulo(),
+                            alerta.detalle() + ": " + equipo + " en "
+                                    + rs.getString("laboratorio") + " · "
                                     + rs.getDate("fecha_programada"),
                             vencido ? "Crítica" : (dias <= 2 ? "Alta" : "Media"));
                 }
@@ -110,20 +111,63 @@ public final class ServicioAlertas {
         }
     }
 
+    static DatosAlertaMantenimiento describirMantenimiento(String tipo, boolean vencido) {
+        String estado = vencido ? "vencido" : "próximo";
+        String estadoFemenino = vencido ? "vencida" : "próxima";
+        if (TiposMantenimiento.ACTUALIZACION_SOFTWARE.equals(tipo)) {
+            return new DatosAlertaMantenimiento("ACTUALIZACION_SOFTWARE",
+                    "Actualización de software " + estadoFemenino,
+                    "Actualización de software " + estadoFemenino);
+        }
+        if (TiposMantenimiento.ACTUALIZACION_HARDWARE.equals(tipo)) {
+            return new DatosAlertaMantenimiento("ACTUALIZACION_HARDWARE",
+                    "Actualización de hardware " + estadoFemenino,
+                    "Actualización de hardware " + estadoFemenino);
+        }
+        if (TiposMantenimiento.DISPOSICION_MATERIAL_PELIGROSO.equals(tipo)) {
+            return new DatosAlertaMantenimiento("DISPOSICION_PELIGROSA",
+                    "Disposición de material peligroso " + estadoFemenino,
+                    "Disposición de material peligroso " + estadoFemenino);
+        }
+        if (TiposMantenimiento.RETIRO_EQUIPO_OBSOLETO.equals(tipo)) {
+            return new DatosAlertaMantenimiento("RETIRO_EQUIPO_OBSOLETO",
+                    "Retiro de equipo obsoleto " + estado,
+                    "Retiro de equipo obsoleto " + estado);
+        }
+        if (TiposMantenimiento.PREVENTIVO.equals(tipo)) {
+            return new DatosAlertaMantenimiento("MANTENIMIENTO_PREVENTIVO",
+                    "Mantenimiento preventivo " + estado,
+                    "Mantenimiento preventivo " + estado);
+        }
+        if (TiposMantenimiento.CORRECTIVO.equals(tipo)) {
+            return new DatosAlertaMantenimiento("MANTENIMIENTO_CORRECTIVO",
+                    "Mantenimiento correctivo " + estado,
+                    "Mantenimiento correctivo " + estado);
+        }
+        return new DatosAlertaMantenimiento("MANTENIMIENTO_GENERAL",
+                "Mantenimiento " + estado, (tipo == null || tipo.isBlank()
+                        ? "Mantenimiento" : tipo) + " " + estado);
+    }
+
+    record DatosAlertaMantenimiento(String tipoAlerta, String titulo, String detalle) {
+    }
+
     private void generarMantenimientosRequeridos(Connection conexion) throws SQLException {
-        String sql = "SELECT i.codigo, i.nombre_equipo, l.nombre laboratorio, i.ultimo_mantenimiento "
-                + "FROM inventario i JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
-                + "WHERE i.estado NOT IN ('Baja','En mantenimiento') "
-                + "AND (i.ultimo_mantenimiento IS NULL OR i.ultimo_mantenimiento "
-                + "< DATE_SUB(CURDATE(), INTERVAL ? DAY)) AND NOT EXISTS (SELECT 1 "
-                + "FROM mantenimiento m WHERE m.id_inventario=i.id_inventario "
-                + "AND m.estado IN ('Pendiente','En proceso'))";
+        String sql = consultaMantenimientosRequeridos();
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
             ps.setInt(1, DIAS_SIN_MANTENIMIENTO);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     java.sql.Date ultimo = rs.getDate("ultimo_mantenimiento");
-                    alertaDAO.guardarGenerada(conexion, "MANTENIMIENTO_REQUERIDO",
+                    if (!requiereMantenimientoPreventivo(
+                            ultimo == null ? null : ultimo.toLocalDate(),
+                            rs.getDate("fecha_registro").toLocalDate(),
+                            rs.getDate("fecha_actual").toLocalDate(),
+                            rs.getString("estado_inventario"), false)) {
+                        continue;
+                    }
+                    alertaDAO.guardarGenerada(conexion, null, null, null,
+                            rs.getInt("id_inventario"), "MANTENIMIENTO_REQUERIDO",
                             rs.getString("codigo"), "Programar mantenimiento preventivo",
                             nombreEquipo(rs.getString("codigo"), rs.getString("nombre_equipo"))
                                     + " en " + rs.getString("laboratorio") + " · "
@@ -135,6 +179,29 @@ public final class ServicioAlertas {
         }
     }
 
+    static String consultaMantenimientosRequeridos() {
+        return "SELECT i.id_inventario, i.codigo, i.nombre_equipo, l.nombre laboratorio, "
+                + "i.ultimo_mantenimiento, DATE(i.fecha_registro) fecha_registro, "
+                + "CURDATE() fecha_actual, i.estado estado_inventario "
+                + "FROM inventario i JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
+                + "WHERE i.estado NOT IN ('Baja','En mantenimiento') "
+                + "AND " + RepositorioAlertas.condicionAntiguedadMantenimiento("?")
+                + " AND NOT EXISTS (SELECT 1 "
+                + "FROM mantenimiento m WHERE m.id_inventario=i.id_inventario "
+                + "AND m.estado IN ('Pendiente','En proceso'))";
+    }
+
+    static boolean requiereMantenimientoPreventivo(LocalDate ultimoMantenimiento,
+            LocalDate fechaRegistro, LocalDate fechaActual, String estadoInventario,
+            boolean tieneMantenimientoActivo) {
+        if ("Baja".equals(estadoInventario) || "En mantenimiento".equals(estadoInventario)
+                || tieneMantenimientoActivo) {
+            return false;
+        }
+        LocalDate fechaBase = ultimoMantenimiento == null ? fechaRegistro : ultimoMantenimiento;
+        return ChronoUnit.DAYS.between(fechaBase, fechaActual) > DIAS_SIN_MANTENIMIENTO;
+    }
+
     private void generarFallas(Connection conexion) throws SQLException {
         String sql = "SELECT f.id_falla, i.codigo codigo_equipo, l.nombre laboratorio, f.prioridad, f.descripcion_falla "
                 + "FROM reporte_fallas f LEFT JOIN inventario i ON i.id_inventario=f.id_inventario "
@@ -143,7 +210,8 @@ public final class ServicioAlertas {
                 ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 String codigo = rs.getString("codigo_equipo");
-                alertaDAO.guardarGenerada(conexion, "FALLA_PENDIENTE",
+                alertaDAO.guardarGenerada(conexion, null, rs.getInt("id_falla"), null, null,
+                        "FALLA_PENDIENTE",
                         String.valueOf(rs.getInt("id_falla")), "Falla pendiente",
                         nombreEquipo(codigo, null) + " en " + rs.getString("laboratorio")
                                 + " · " + resumir(rs.getString("descripcion_falla")),
@@ -153,18 +221,19 @@ public final class ServicioAlertas {
     }
 
     private void generarEquipos(Connection conexion) throws SQLException {
-        String sql = "SELECT i.codigo, i.nombre_equipo, l.nombre laboratorio, COUNT(f.id_falla) total_fallas "
+        String sql = "SELECT i.id_inventario, i.codigo, i.nombre_equipo, l.nombre laboratorio, COUNT(f.id_falla) total_fallas "
                 + "FROM inventario i JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
                 + "LEFT JOIN reporte_fallas f "
                 + "ON f.id_inventario=i.id_inventario "
                 + "AND f.estado<>'Cancelada' WHERE i.estado='Con falla' "
-                + "GROUP BY i.codigo, i.nombre_equipo, l.nombre";
+                + "GROUP BY i.id_inventario, i.codigo, i.nombre_equipo, l.nombre";
         try (PreparedStatement ps = conexion.prepareStatement(sql);
                 ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 int fallas = rs.getInt("total_fallas");
                 boolean sugerirBaja = fallas >= FALLAS_PARA_SUGERIR_BAJA;
-                alertaDAO.guardarGenerada(conexion,
+                alertaDAO.guardarGenerada(conexion, null, null, null,
+                        rs.getInt("id_inventario"),
                         sugerirBaja ? "EQUIPO_BAJA" : "EQUIPO_REVISION", rs.getString("codigo"),
                         sugerirBaja ? "Equipo requiere valorar baja" : "Equipo requiere revisión",
                         nombreEquipo(rs.getString("codigo"), rs.getString("nombre_equipo"))
@@ -191,7 +260,8 @@ public final class ServicioAlertas {
                         + (esAlumno ? "un equipo en " : "el aula ") + recurso + " · "
                         + rs.getDate("fecha") + " · " + rs.getString("horario") + " · "
                         + resumir(rs.getString("actividad"));
-                alertaDAO.guardarGenerada(conexion, "RESERVA_PENDIENTE",
+                alertaDAO.guardarGenerada(conexion, rs.getInt("id_reserva"), null, null, null,
+                        "RESERVA_PENDIENTE",
                         String.valueOf(rs.getInt("id_reserva")), titulo, detalle,
                         rs.getDate("fecha").toLocalDate().equals(java.time.LocalDate.now())
                                 ? "Alta" : "Media");
@@ -214,7 +284,7 @@ public final class ServicioAlertas {
                 if (observaciones != null && !observaciones.isBlank()) {
                     detalle += " Observaciones: " + resumir(observaciones);
                 }
-                alertaDAO.guardarGenerada(conexion,
+                alertaDAO.guardarGenerada(conexion, rs.getInt("id_reserva"), null, null, null,
                         aprobada ? "RESERVA_APROBADA" : "RESERVA_RECHAZADA",
                         String.valueOf(rs.getInt("id_reserva")),
                         aprobada ? "Reserva autorizada" : "Reserva rechazada",

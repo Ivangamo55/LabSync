@@ -5,6 +5,7 @@ import labsync.aplicacion.AplicacionLabSync;
 import labsync.persistencia.CatalogoLaboratorios;
 import labsync.configuracion.ConexionBaseDatos;
 import labsync.persistencia.ConsultaTabla;
+import labsync.modelo.TiposMantenimiento;
 import labsync.servicio.ServicioMantenimiento;
 import labsync.interfaz.comun.ValidacionFechas;
 import labsync.interfaz.bitacora.VentanaBitacoraGeneral;
@@ -12,6 +13,7 @@ import labsync.interfaz.inventario.VentanaGestionInventario;
 import labsync.interfaz.fallas.VentanaGestionReportesFallas;
 import labsync.interfaz.reservas.VentanaGestionReservas;
 import labsync.interfaz.panel.VentanaPanelLaboratorista;
+import labsync.modelo.SesionUsuario;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -44,19 +46,29 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaGestionMantenimiento.class.getName());
     private String nombreUsuario;
+    private SesionUsuario sesion;
     private int idMantenimientoSeleccionado = 0;
     boolean modoEdicion = false;
     private final String PH_BUSCAR = "Código, laboratorio o responsable";
     private final Color COLOR_PLACEHOLDER = new Color(150, 150, 150);
     private final Color COLOR_TEXTO = new Color(51, 51, 51);
+    private boolean accionMantenimientoEnCurso;
+    private volatile FiltrosMantenimiento filtrosAplicados = FiltrosMantenimiento.porDefecto();
     
     public VentanaGestionMantenimiento(String nombreRecibido) {
         initComponents();
+        this.nombreUsuario = nombreRecibido;
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(this, sidebar, header, body);
+        normalizarGeometriaOperativa();
+        configurarPresentacionTablaMantenimiento();
+        configurarTiposMantenimiento();
         CatalogoLaboratorios.cargarTodos(cmbLaboratorio, "Todos");
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
-        this.nombreUsuario = nombreRecibido;
+        this.sesion = SesionUsuario.buscarLaboratorista(nombreRecibido);
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         
         txtObservacionesMant.setLineWrap(true);
         txtObservacionesMant.setWrapStyleWord(true);
@@ -84,7 +96,7 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         cargarCodigosEquipo();
         cmbCodigoEquipo.setSelectedItem(codigoEquipo);
         cargarDatosEquipoSeleccionado();
-        cmbTipoMantModal.setSelectedItem("Preventivo");
+        cmbTipoMantModal.setSelectedItem(TiposMantenimiento.PREVENTIVO);
         txtResponsable.setText(nombreUsuario);
         txtResponsable.setEditable(false);
         lbTituloModal.setText("Programar mantenimiento preventivo");
@@ -98,10 +110,17 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
     
     public VentanaGestionMantenimiento() {
         initComponents();
+        this.nombreUsuario = "Usuario";
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(this, sidebar, header, body);
+        normalizarGeometriaOperativa();
+        configurarPresentacionTablaMantenimiento();
+        configurarTiposMantenimiento();
         CatalogoLaboratorios.cargarTodos(cmbLaboratorio, "Todos");
 
-        this.nombreUsuario = "Usuario";
+        this.sesion = new SesionUsuario(0, "Usuario", "Usuario", "Laboratorista");
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
 
         txtObservacionesMant.setLineWrap(true);
         txtObservacionesMant.setWrapStyleWord(true);
@@ -116,12 +135,84 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         iniciarActualizacionAutomatica();
     }
 
+    public VentanaGestionMantenimiento(SesionUsuario sesionRecibida) {
+        this(sesionRecibida == null ? "Usuario" : sesionRecibida.getNombre());
+        if (sesionRecibida != null) this.sesion = sesionRecibida;
+    }
+
     private void iniciarActualizacionAutomatica() {
-        new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT m.id_mantenimiento,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,m.tipo_mantenimiento,DATE_FORMAT(m.fecha_programada,'%Y-%m-%d') fecha_programada,m.estado,m.responsable,IFNULL(m.observaciones,'') observaciones FROM mantenimiento m JOIN inventario i ON i.id_inventario=m.id_inventario JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio WHERE m.estado IN ('Pendiente','En proceso') ORDER BY m.fecha_programada DESC",
-                new String[]{"ID", "Código Equipo", "Nombre Equipo", "Laboratorio", "Tipo Mantenimiento", "Fecha Programada", "Estado", "Responsable", "Observaciones"},
-                new String[]{"id_mantenimiento", "codigo_equipo", "nombre_equipo", "laboratorio", "tipo_mantenimiento", "fecha_programada", "estado", "responsable", "observaciones"}),
-                modelo -> { tablaMantenimiento.setModel(modelo); ocultarColumnaID(); ocultarColumnaNombreEquipo(); });
+        new ActualizacionAutomatica<>(this, 7_000,
+                () -> {
+                    FiltrosMantenimiento filtros = filtrosAplicados;
+                    return new ResultadoMantenimientos(filtros, consultarMantenimientos(filtros));
+                },
+                resultado -> {
+                    if (!accionMantenimientoEnCurso
+                            && resultado.filtros().equals(filtrosAplicados)) {
+                        aplicarModeloMantenimiento(resultado.modelo());
+                    }
+                });
+    }
+
+    private void aplicarModeloMantenimiento(javax.swing.table.DefaultTableModel datosNuevos) {
+        labsync.interfaz.comun.ActualizadorModeloTabla.aplicar(
+                tablaMantenimiento, datosNuevos, 0, () -> {
+                    configurarColumnasTablaMantenimiento();
+                });
+    }
+
+    private void configurarPresentacionTablaMantenimiento() {
+        labsync.interfaz.comun.EstiloTablaLaboratorista.aplicar(tablaMantenimiento);
+        configurarColumnasTablaMantenimiento();
+    }
+
+    private void normalizarGeometriaOperativa() {
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarSidebar(sidebar);
+        javax.swing.JPanel barraFiltros = labsync.interfaz.comun.LayoutLaboratorista.normalizarHeaderOperativo(
+                header, lbTitulo, txtBuscar,
+                new java.awt.Component[]{cmbTipoMant, cmbEstado, cmbLaboratorio},
+                new java.awt.Component[]{lbTipoMant, lbEstado, jLabel1}, btnLimpiar, btnBuscar);
+        labsync.interfaz.comun.LayoutLaboratorista.restaurarHeaderIdentidad(
+                this, header, lbTitulo, nombreUsuario);
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarBodyOperativo(
+                body, jScrollPane1, barraFiltros,
+                java.util.List.of(btnRegistrar, btnEditar, btnRealizado, btnCancelar),
+                btnExportar);
+    }
+
+    private void configurarColumnasTablaMantenimiento() {
+        tablaMantenimiento.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
+        int[] anchos = {0, 130, 0, 110, 190, 140, 110, 150, 170};
+        for (int i = 1; i < anchos.length && i < tablaMantenimiento.getColumnCount(); i++) {
+            if (i == 2) continue;
+            javax.swing.table.TableColumn columna = tablaMantenimiento.getColumnModel().getColumn(i);
+            columna.setPreferredWidth(anchos[i]);
+            columna.setMinWidth(i == 4 || i == 8 ? 110 : Math.min(anchos[i], 75));
+        }
+        ocultarColumnaID();
+        ocultarColumnaNombreEquipo();
+    }
+
+    private void restaurarSeleccionMantenimiento(Integer idMantenimiento) {
+        if (idMantenimiento == null) return;
+        for (int filaModelo = 0; filaModelo < tablaMantenimiento.getModel().getRowCount(); filaModelo++) {
+            Object valor = tablaMantenimiento.getModel().getValueAt(filaModelo, 0);
+            if (idMantenimiento.equals(Integer.valueOf(String.valueOf(valor)))) {
+                int filaVista = tablaMantenimiento.convertRowIndexToView(filaModelo);
+                if (filaVista >= 0) {
+                    tablaMantenimiento.getSelectionModel().setSelectionInterval(filaVista, filaVista);
+                }
+                return;
+            }
+        }
+        tablaMantenimiento.clearSelection();
+    }
+
+    private void configurarTiposMantenimiento() {
+        cmbTipoMantModal.setModel(new javax.swing.DefaultComboBoxModel<>(
+                TiposMantenimiento.opcionesRegistro()));
+        cmbTipoMant.setModel(new javax.swing.DefaultComboBoxModel<>(
+                TiposMantenimiento.opcionesFiltro()));
     }
     
     private void ocultarCampoNombreEquipo() {
@@ -435,6 +526,15 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
             return false;
         }
 
+        String tipo = cmbTipoMantModal.getSelectedItem().toString();
+        if (TiposMantenimiento.requiereObservaciones(tipo)
+                && txtObservacionesMant.getText().isBlank()) {
+            mostrarErrorValidacion(
+                    "Ingresa la justificación y los detalles requeridos para " + tipo + ".",
+                    txtObservacionesMant);
+            return false;
+        }
+
         return true;
     }
     
@@ -500,6 +600,10 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
                 con.rollback();
                 javax.swing.JOptionPane.showMessageDialog(addMantenimiento, ex.getMessage(),
                         "Conflicto con reservas", javax.swing.JOptionPane.WARNING_MESSAGE);
+            } catch (IllegalArgumentException ex) {
+                con.rollback();
+                javax.swing.JOptionPane.showMessageDialog(addMantenimiento, ex.getMessage(),
+                        "Campo obligatorio", javax.swing.JOptionPane.WARNING_MESSAGE);
             } catch (java.sql.SQLException ex) {
                 con.rollback();
                 throw ex;
@@ -522,7 +626,10 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
             try {
                 ServicioMantenimiento servicio = new ServicioMantenimiento();
                 if (realizado) {
-                    servicio.finalizar(con, idMantenimiento, codigoEquipo);
+                    if (!servicio.finalizar(con, idMantenimiento, codigoEquipo)) {
+                        throw new java.sql.SQLException(
+                                "No se actualizó el mantenimiento seleccionado.");
+                    }
                 } else {
                     servicio.cancelar(con, idMantenimiento, codigoEquipo);
                 }
@@ -545,98 +652,30 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
     }
     
     private void cargarTablaMantenimiento() {
-        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel();
-        
-        modelo.addColumn("ID");
-        modelo.addColumn("Código Equipo");
-        modelo.addColumn("Nombre Equipo");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Tipo Mantenimiento");
-        modelo.addColumn("Fecha Programada");
-        modelo.addColumn("Estado");
-        modelo.addColumn("Responsable");
-        modelo.addColumn("Observaciones");
-        
-        tablaMantenimiento.setModel(modelo);
-        ocultarColumnaID();
-        ocultarColumnaNombreEquipo();
-        
-        String sql = "SELECT m.id_mantenimiento,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,m.tipo_mantenimiento, "
-            + "DATE_FORMAT(m.fecha_programada, '%Y-%m-%d') AS fecha_programada, "
-            + "m.estado,m.responsable,IFNULL(m.observaciones,'') AS observaciones FROM mantenimiento m "
-            + "JOIN inventario i ON i.id_inventario=m.id_inventario JOIN laboratorios l ON l.id_laboratorio=i.id_laboratorio "
-            + "WHERE m.estado IN ('Pendiente','En proceso') ORDER BY m.fecha_programada DESC";
-        
-        java.sql.Connection con = ConexionBaseDatos.conectar();
-        
-        if (con == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return;
-        }
-        
-        try {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            java.sql.ResultSet rs = ps.executeQuery();
-            
-            while (rs.next()) {
-                Object[] fila = new Object[9];
-
-                fila[0] = rs.getInt("id_mantenimiento");
-                fila[1] = rs.getString("codigo_equipo");
-                fila[2] = rs.getString("nombre_equipo");
-                fila[3] = rs.getString("laboratorio");
-                fila[4] = rs.getString("tipo_mantenimiento");
-                fila[5] = rs.getString("fecha_programada");
-                fila[6] = rs.getString("estado");
-                fila[7] = rs.getString("responsable");
-                fila[8] = rs.getString("observaciones");
-
-                modelo.addRow(fila);
-            }
-        } catch (java.sql.SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Error al cargar mantenimientos: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (java.sql.SQLException ex) {
-                
-            }
-        }
+        cargarTablaMantenimientoFiltrada();
     }
     
     private void cargarTablaMantenimientoFiltrada() {
-        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel();
-        
-        modelo.addColumn("ID");
-        modelo.addColumn("Código Equipo");
-        modelo.addColumn("Nombre Equipo");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Tipo Mantenimiento");
-        modelo.addColumn("Fecha Programada");
-        modelo.addColumn("Estado");
-        modelo.addColumn("Responsable");
-        modelo.addColumn("Observaciones");
-        
-        String textoBusqueda = txtBuscar.getText().trim();
-        
-        if (textoBusqueda.equals(PH_BUSCAR)) {
-            textoBusqueda = "";
+        filtrosAplicados = capturarFiltrosMantenimiento();
+        try {
+            aplicarModeloMantenimiento(consultarMantenimientos(filtrosAplicados));
+        } catch (IllegalStateException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Error al filtrar mantenimientos: " + ex.getMessage(),
+                    "Error SQL", javax.swing.JOptionPane.ERROR_MESSAGE);
         }
-        
-        String tipoSeleccionado = cmbTipoMant.getSelectedItem().toString();
-        String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
-        String laboratorioSeleccionado = cmbLaboratorio.getSelectedItem().toString();
-        
+    }
+
+    private FiltrosMantenimiento capturarFiltrosMantenimiento() {
+        String textoBusqueda = txtBuscar.getText().trim();
+        if (textoBusqueda.equals(PH_BUSCAR)) textoBusqueda = "";
+        return new FiltrosMantenimiento(textoBusqueda,
+                cmbTipoMant.getSelectedItem().toString(),
+                cmbEstado.getSelectedItem().toString(),
+                cmbLaboratorio.getSelectedItem().toString());
+    }
+
+    static javax.swing.table.DefaultTableModel consultarMantenimientos(FiltrosMantenimiento filtros) {
         String sql = "SELECT m.id_mantenimiento,i.codigo codigo_equipo,i.nombre_equipo,l.nombre laboratorio,m.tipo_mantenimiento, "
             + "DATE_FORMAT(fecha_programada, '%Y-%m-%d') AS fecha_programada, "
             + "m.estado,m.responsable,IFNULL(m.observaciones,'') AS observaciones FROM mantenimiento m "
@@ -644,92 +683,48 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
         
-        if (!textoBusqueda.isEmpty()) {
+        if (!filtros.texto().isEmpty()) {
             sql += "AND (i.codigo LIKE ? "
                     + "OR l.nombre LIKE ? "
                     + "OR m.responsable LIKE ?) ";
 
-            String busqueda = "%" + textoBusqueda + "%";
+            String busqueda = "%" + filtros.texto() + "%";
 
             parametros.add(busqueda);
             parametros.add(busqueda);
             parametros.add(busqueda);
         }
         
-        if (!tipoSeleccionado.equals("Todos")) {
+        if (!filtros.tipo().equals("Todos")) {
             sql += "AND m.tipo_mantenimiento = ? ";
-            parametros.add(tipoSeleccionado);
+            parametros.add(filtros.tipo());
         }
-        
-        if (!estadoSeleccionado.equals("Todos")) {
+        if (!filtros.estado().equals("Todos")) {
             sql += "AND m.estado = ? ";
-            parametros.add(estadoSeleccionado);
+            parametros.add(filtros.estado());
         } else {
             sql += "AND m.estado IN ('Pendiente', 'En proceso') ";
         }
         
-        if (!laboratorioSeleccionado.equals("Todos")) {
+        if (!filtros.laboratorio().equals("Todos")) {
             sql += "AND l.nombre = ? ";
-            parametros.add(laboratorioSeleccionado);
+            parametros.add(filtros.laboratorio());
         }
-        
         sql += "ORDER BY fecha_programada DESC";
-        
-        java.sql.Connection con = ConexionBaseDatos.conectar();
-        
-        if (con == null) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-            return;
+        return ConsultaTabla.ejecutar(sql,
+                new String[]{"ID", "Código Equipo", "Nombre Equipo", "Laboratorio", "Tipo Mantenimiento", "Fecha Programada", "Estado", "Responsable", "Observaciones"},
+                new String[]{"id_mantenimiento", "codigo_equipo", "nombre_equipo", "laboratorio", "tipo_mantenimiento", "fecha_programada", "estado", "responsable", "observaciones"},
+                ps -> { for (int i = 0; i < parametros.size(); i++) ps.setString(i + 1, parametros.get(i)); });
+    }
+
+    record FiltrosMantenimiento(String texto, String tipo, String estado, String laboratorio) {
+        static FiltrosMantenimiento porDefecto() {
+            return new FiltrosMantenimiento("", "Todos", "Todos", "Todos");
         }
-        
-        try {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            
-            for (int i = 0; i < parametros.size(); i++) {
-                ps.setString(i + 1, parametros.get(i));
-            }
-            
-            java.sql.ResultSet rs = ps.executeQuery();
-            
-            while (rs.next()) {
-                Object[] fila = new Object[9];
-                
-                fila[0] = rs.getInt("id_mantenimiento");
-                fila[1] = rs.getString("codigo_equipo");
-                fila[2] = rs.getString("nombre_equipo");
-                fila[3] = rs.getString("laboratorio");
-                fila[4] = rs.getString("tipo_mantenimiento");
-                fila[5] = rs.getString("fecha_programada");
-                fila[6] = rs.getString("estado");
-                fila[7] = rs.getString("responsable");
-                fila[8] = rs.getString("observaciones");
-                
-                modelo.addRow(fila);
-            }
-            
-            tablaMantenimiento.setModel(modelo);
-            ocultarColumnaID();
-            ocultarColumnaNombreEquipo();
-        } catch (java.sql.SQLException e) {
-            javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Error al filtrar mantenimientos: " + e.getMessage(),
-                "Error SQL",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (java.sql.SQLException ex) {
-                
-            }
-        }
-   }
+    }
+
+    private record ResultadoMantenimientos(FiltrosMantenimiento filtros,
+            javax.swing.table.DefaultTableModel modelo) { }
     
     private void limpiarFiltrosMantenimiento() {
         txtBuscar.setText(PH_BUSCAR);
@@ -1371,7 +1366,7 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         cmbTipoMantModal.setBackground(new java.awt.Color(255, 255, 255));
         cmbTipoMantModal.setFont(new java.awt.Font("Arial", 1, 12)); // NOI18N
         cmbTipoMantModal.setForeground(new java.awt.Color(102, 102, 102));
-        cmbTipoMantModal.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Selecciona", "Preventivo", "Correctivo", "Actualización de software", "Limpieza", "Retiro de equipo obsoleto", "Otro" }));
+        cmbTipoMantModal.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Selecciona", "Preventivo", "Correctivo", "Actualización de software", "Actualización de hardware", "Disposición de material peligroso", "Retiro de equipo obsoleto", "Limpieza", "Otro" }));
         cmbTipoMantModal.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         cmbTipoMantModal.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         bodyModal.add(cmbTipoMantModal, new org.netbeans.lib.awtextra.AbsoluteConstraints(310, 200, 220, 24));
@@ -1541,7 +1536,7 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
         cmbTipoMant.setBackground(new java.awt.Color(255, 255, 255));
         cmbTipoMant.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         cmbTipoMant.setForeground(new java.awt.Color(102, 102, 102));
-        cmbTipoMant.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "Preventivo", "Correctivo", "Actualización de software", "Limpieza", "Retiro de equipo obsoleto", "Otro" }));
+        cmbTipoMant.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Todos", "Preventivo", "Correctivo", "Actualización de software", "Actualización de hardware", "Disposición de material peligroso", "Retiro de equipo obsoleto", "Limpieza", "Otro" }));
         cmbTipoMant.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(102, 102, 102)));
         cmbTipoMant.setMinimumSize(new java.awt.Dimension(170, 170));
         cmbTipoMant.setName(""); // NOI18N
@@ -1708,38 +1703,23 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void btnInicioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInicioActionPerformed
-        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(nombreUsuario);
-
-        ventanaDashboard.setVisible(true);
-        ventanaDashboard.setLocationRelativeTo(null);
-
-        this.dispose();
+        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaDashboard);
     }//GEN-LAST:event_btnInicioActionPerformed
 
     private void btnBitacoraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBitacoraActionPerformed
-        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(nombreUsuario);
-        
-        ventanaBitacora.setVisible(true);
-        ventanaBitacora.setLocationRelativeTo(null);
-        
-        this.dispose();
+        VentanaBitacoraGeneral ventanaBitacora = new VentanaBitacoraGeneral(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaBitacora);
     }//GEN-LAST:event_btnBitacoraActionPerformed
 
     private void btnInventarioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInventarioActionPerformed
-        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(nombreUsuario);
-        
-        ventanaInventario.setVisible(true);
-        ventanaInventario.setLocationRelativeTo(null);
-        
-        this.dispose();
+        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaInventario);
     }//GEN-LAST:event_btnInventarioActionPerformed
 
     private void btnReservasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReservasActionPerformed
-        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(nombreUsuario);
-        
-        ventanaReserva.setVisible(true);
-        ventanaReserva.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReserva);
     }//GEN-LAST:event_btnReservasActionPerformed
 
     private void btnRegistrarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRegistrarActionPerformed
@@ -1837,31 +1817,34 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
     }//GEN-LAST:event_btnLimpiarActionPerformed
 
     private void btnRealizadoActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRealizadoActionPerformed
-        int filaSeleccionada = tablaMantenimiento.getSelectedRow();
-        
-        if (filaSeleccionada == -1) {
+        boolean haySeleccion = SeleccionMantenimientoTabla.ejecutarSiExiste(
+                tablaMantenimiento, seleccion -> {
+            accionMantenimientoEnCurso = true;
+            try {
+                int confirmacion = javax.swing.JOptionPane.showConfirmDialog(
+                    this,
+                    "¿Deseas marcar este mantenimiento como realizado?",
+                    "Confirmar selección",
+                    javax.swing.JOptionPane.YES_NO_OPTION,
+                    javax.swing.JOptionPane.QUESTION_MESSAGE
+                );
+
+                if (confirmacion == javax.swing.JOptionPane.YES_OPTION) {
+                    cambiarEstadoMantenimiento(seleccion.idMantenimiento(),
+                            seleccion.codigoEquipo(), true);
+                }
+            } finally {
+                accionMantenimientoEnCurso = false;
+            }
+        });
+
+        if (!haySeleccion) {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
                 "Selecciona un mantenimiento de la tabla.",
                 "Sin selección",
                 javax.swing.JOptionPane.WARNING_MESSAGE
             );
-            return;
-        }
-        
-        int idMantenimiento = Integer.parseInt(tablaMantenimiento.getValueAt(filaSeleccionada, 0).toString());
-        String codigoEquipo = tablaMantenimiento.getValueAt(filaSeleccionada, 1).toString();
-        
-        int confirmacion = javax.swing.JOptionPane.showConfirmDialog(
-            this,
-            "¿Deseas marcar este mantenimiento como realizado?",
-            "Confirmar selección",
-            javax.swing.JOptionPane.YES_NO_OPTION,
-            javax.swing.JOptionPane.QUESTION_MESSAGE
-        );
-        
-        if (confirmacion == javax.swing.JOptionPane.YES_OPTION) {
-            cambiarEstadoMantenimiento(idMantenimiento, codigoEquipo, true);
         }
     }//GEN-LAST:event_btnRealizadoActionPerformed
 
@@ -1946,11 +1929,8 @@ public class VentanaGestionMantenimiento extends javax.swing.JFrame {
     }//GEN-LAST:event_btnEditarActionPerformed
 
     private void btnReporteFallasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReporteFallasActionPerformed
-        VentanaGestionReportesFallas ventanaReporteFalla = new VentanaGestionReportesFallas(nombreUsuario);
-        
-        ventanaReporteFalla.setVisible(true);
-        ventanaReporteFalla.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReportesFallas ventanaReporteFalla = new VentanaGestionReportesFallas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReporteFalla);
     }//GEN-LAST:event_btnReporteFallasActionPerformed
 
     private void btnExportarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarActionPerformed

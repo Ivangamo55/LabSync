@@ -1,7 +1,23 @@
-# Project exclude paths
-/LabSync/target/
-/tmp/
-/backups/
-# IntelliJ
+# Artefactos generados
+target/
+*.class
+*.log
+*.zip
+
+# Archivos temporales y respaldos locales
+tmp/
+backups/
+*.tmp
+*.swp
+*~
+.DS_Store
+
+# Configuración local y credenciales
+.env
+.env.*
+*.local.properties
+labsync-local.properties
+
+# IDE
 .idea/
 *.iml

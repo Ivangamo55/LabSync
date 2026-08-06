@@ -1,31 +1,24 @@
-# Credenciales de prueba de horarios UTJ-CCD
+# Credenciales ficticias de demostración
 
-La migración `20260722_agregar_horarios_escolares_ccd.sql` crea catorce cuentas
-ficticias con rol `Profesor`. Todas usan, exclusivamente para pruebas locales:
+La instalación completa requiere únicamente importar:
 
 ```text
-Contraseña: LabSync-CCD-2026!
+labsync_db/labsync_db.sql
 ```
 
-| Grupo asignado | Correo |
-|---|---|
-| DSM 1.º A matutino | `prueba.dsm1@utj.edu.mx` |
-| DSM 2.º A matutino | `prueba.dsm2@utj.edu.mx` |
-| DSM 3.º A matutino | `prueba.dsm3@utj.edu.mx` |
-| DSM 4.º A matutino | `prueba.dsm4@utj.edu.mx` |
-| DSM 5.º A matutino | `prueba.dsm5@utj.edu.mx` |
-| EVND 1.º A matutino | `prueba.evnd1@utj.edu.mx` |
-| EVND 2.º A matutino | `prueba.evnd2@utj.edu.mx` |
-| EVND 3.º A matutino | `prueba.evnd3@utj.edu.mx` |
-| EVND 4.º A matutino | `prueba.evnd4@utj.edu.mx` |
-| EVND 5.º B vespertino | `prueba.evnd5@utj.edu.mx` |
-| Ingeniería TI 7.º B vespertino | `prueba.iti7@utj.edu.mx` |
-| Ingeniería TI 8.º B vespertino | `prueba.iti8@utj.edu.mx` |
-| Ingeniería TI 9.º B vespertino | `prueba.iti9@utj.edu.mx` |
-| Ingeniería TI 10.º B vespertino | `prueba.iti10@utj.edu.mx` |
+El archivo incluye datos mínimos ficticios y una cuenta de laboratorista que
+permite recorrer los módulos administrativos:
 
-Las contraseñas se almacenan con SHA-256, utilizando exactamente el mismo
-mecanismo de autenticación que las cuentas existentes de LabSync.
+```text
+Correo: laboratorista.demo@labsync.example
+Contraseña: LabSyncDemo2026!
+Rol: Laboratorista
+```
 
-Estas cuentas no deben utilizarse en producción. Cambia o elimina sus
-credenciales después de terminar las demostraciones.
+También se incluyen un profesor y un estudiante ficticios, laboratorios, ciclo,
+horario, inventario, software, reserva, falla y mantenimiento. La contraseña se
+guarda como hash SHA-256 hexadecimal mediante el mecanismo que utiliza LabSync;
+no se almacena en texto plano.
+
+Estas identidades y datos son únicamente para demostraciones locales. No deben
+utilizarse en producción.

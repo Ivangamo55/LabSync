@@ -1,6 +1,6 @@
 package labsync.servicio;
 
-import labsync.servicio.ServicioDisponibilidad;
+import labsync.modelo.TiposMantenimiento;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -15,25 +15,70 @@ public final class ServicioMantenimiento {
 
     public void guardar(Connection conexion, DatosMantenimiento datos, Integer idMantenimiento)
             throws SQLException, ConflictoMantenimientoException {
+        validarDatos(datos);
         validarConflictoReservas(conexion, datos, idMantenimiento);
         if (idMantenimiento == null) {
             insertar(conexion, datos);
         } else {
             actualizar(conexion, datos, idMantenimiento);
         }
-        actualizarInventario(conexion, datos.codigoEquipo, datos.estado, false);
+        actualizarInventario(conexion, datos.codigoEquipo, datos.estado,
+                datos.tipoMantenimiento, "Realizado".equals(datos.estado));
     }
 
-    public void finalizar(Connection conexion, int idMantenimiento, String codigoEquipo)
+    public boolean finalizar(Connection conexion, int idMantenimiento, String codigoEquipo)
             throws SQLException {
-        actualizarEstado(conexion, idMantenimiento, "Realizado");
-        actualizarInventario(conexion, codigoEquipo, "Realizado", true);
+        boolean autoCommitOriginal = conexion.getAutoCommit();
+        try {
+            if (autoCommitOriginal) {
+                conexion.setAutoCommit(false);
+            }
+            String tipo = obtenerTipoParaFinalizar(conexion, idMantenimiento, codigoEquipo);
+            actualizarEstado(conexion, idMantenimiento, "Realizado");
+            actualizarInventario(conexion, codigoEquipo, "Realizado", tipo, true);
+            if (autoCommitOriginal) {
+                conexion.commit();
+            }
+            return true;
+        } catch (SQLException ex) {
+            conexion.rollback();
+            throw ex;
+        } finally {
+            if (autoCommitOriginal) {
+                conexion.setAutoCommit(true);
+            }
+        }
     }
 
     public void cancelar(Connection conexion, int idMantenimiento, String codigoEquipo)
             throws SQLException {
         actualizarEstado(conexion, idMantenimiento, "Cancelado");
-        actualizarInventario(conexion, codigoEquipo, "Cancelado", false);
+        actualizarInventario(conexion, codigoEquipo, "Cancelado", null, false);
+    }
+
+    private void validarDatos(DatosMantenimiento datos) {
+        if (TiposMantenimiento.requiereObservaciones(datos.tipoMantenimiento)
+                && (datos.observaciones == null || datos.observaciones.isBlank())) {
+            throw new IllegalArgumentException("Las observaciones son obligatorias para "
+                    + datos.tipoMantenimiento + ".");
+        }
+    }
+
+    private String obtenerTipoParaFinalizar(
+            Connection conexion, int idMantenimiento, String codigoEquipo) throws SQLException {
+        String sql = "SELECT m.tipo_mantenimiento FROM mantenimiento m "
+                + "JOIN inventario i ON i.id_inventario=m.id_inventario "
+                + "WHERE m.id_mantenimiento=? AND i.codigo=? FOR UPDATE";
+        try (PreparedStatement ps = conexion.prepareStatement(sql)) {
+            ps.setInt(1, idMantenimiento);
+            ps.setString(2, codigoEquipo);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new SQLException("No se encontró el mantenimiento seleccionado.");
+                }
+                return rs.getString("tipo_mantenimiento");
+            }
+        }
     }
 
     private void validarConflictoReservas(
@@ -94,10 +139,18 @@ public final class ServicioMantenimiento {
     }
 
     private void actualizarInventario(
-            Connection conexion, String codigoEquipo, String estadoMantenimiento, boolean registrarFecha)
+            Connection conexion, String codigoEquipo, String estadoMantenimiento,
+            String tipoMantenimiento, boolean registrarFecha)
             throws SQLException {
-        String estadoInventario = esEstadoActivo(estadoMantenimiento)
-                ? "En mantenimiento" : "Disponible";
+        String estadoInventario;
+        if (esEstadoActivo(estadoMantenimiento)) {
+            estadoInventario = "En mantenimiento";
+        } else if ("Realizado".equals(estadoMantenimiento)
+                && TiposMantenimiento.causaBaja(tipoMantenimiento)) {
+            estadoInventario = "Baja";
+        } else {
+            estadoInventario = "Disponible";
+        }
         String sql = registrarFecha
                 ? "UPDATE inventario SET estado = ?, ultimo_mantenimiento = CURDATE() WHERE codigo = ?"
                 : "UPDATE inventario SET estado = ? WHERE codigo = ?";

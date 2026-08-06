@@ -10,4 +10,4 @@ Este es un proyecto Maven multimódulo cuyo código está en el módulo `LabSync
   y el empaquetado, pero no intentes iniciar el JAR.
 - El JAR generado está en `LabSync/target/LabSync-1.0.jar`.
 - La base de datos no es necesaria para compilar. Para pruebas de integración,
-  importa `LabSync/src/main/resources/DB/labsync_db.sql` en MySQL/MariaDB.
+  importa `labsync_db/labsync_db.sql` en MySQL/MariaDB.

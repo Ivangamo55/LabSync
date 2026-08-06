@@ -293,7 +293,7 @@ public class VentanaInicioSesion extends javax.swing.JFrame {
                         break;
                         
                         case "Laboratorista":                            
-                            VentanaPanelLaboratorista ventanaLabo = new VentanaPanelLaboratorista(strNombre);
+                            VentanaPanelLaboratorista ventanaLabo = new VentanaPanelLaboratorista(sesion);
                             ventanaLabo.setLocationRelativeTo(null);
                             ventanaLabo.setVisible(true);
                             this.dispose();
@@ -325,10 +325,12 @@ public class VentanaInicioSesion extends javax.swing.JFrame {
                     );
                 }
             } catch (java.sql.SQLException e) {
+                java.util.logging.Logger.getLogger(VentanaInicioSesion.class.getName()).log(
+                        java.util.logging.Level.WARNING, "No fue posible autenticar", e);
                 javax.swing.JOptionPane.showMessageDialog(
                     this,
-                    "Error en el proceso: " + e.getMessage(),
-                    "Error SQL",
+                    labsync.interfaz.comun.ControlDisponibilidadBaseDatos.MENSAJE_USUARIO,
+                    "Base de datos no disponible",
                     javax.swing.JOptionPane.ERROR_MESSAGE
                 );
             } finally {
@@ -339,8 +341,8 @@ public class VentanaInicioSesion extends javax.swing.JFrame {
         } else {
             javax.swing.JOptionPane.showMessageDialog(
                 this,
-                "No hay conexión con la BD",
-                "Error de red",
+                labsync.interfaz.comun.ControlDisponibilidadBaseDatos.MENSAJE_USUARIO,
+                "Base de datos no disponible",
                 javax.swing.JOptionPane.ERROR_MESSAGE
             );
         }

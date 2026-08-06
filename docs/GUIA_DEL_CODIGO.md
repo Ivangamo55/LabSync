@@ -78,7 +78,7 @@ su función es construir y acomodar controles, por lo que no debe editarse manua
 |---|---|
 | Archivos `.form` | Guardan la definición visual editable por NetBeans. |
 | `resources/images` | Contiene logotipos e iconos usados por Swing. |
-| `labsync_db.sql` | Fuente de verdad única: define el esquema y los catálogos iniciales. |
+| `labsync_db/labsync_db.sql` | Fuente de verdad única: define esquema, restricciones y datos ficticios mínimos. |
 | `pom.xml` | Declara módulos, dependencias y empaquetado Maven. |
 | `mvnw` y `mvnw.cmd` | Permiten compilar sin instalar Maven globalmente. |
 | `Ejecutar-LabSync.cmd` | Facilita la ejecución del JAR en Windows. |

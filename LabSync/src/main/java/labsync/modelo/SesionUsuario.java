@@ -55,6 +55,10 @@ public final class SesionUsuario {
         return buscarPorNombreYRol(nombre, "Estudiante");
     }
 
+    public static SesionUsuario buscarLaboratorista(String nombre) {
+        return buscarPorNombreYRol(nombre, "Laboratorista");
+    }
+
     private static SesionUsuario buscarPorNombreYRol(String nombre, String rolBuscado) {
         String nombreSeguro = normalizar(nombre, "Profesor");
         String sql = "SELECT id, nombre, CONCAT_WS(' ', nombre, apellido_p, apellido_m) nombre_completo, rol "

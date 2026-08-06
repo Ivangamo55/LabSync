@@ -13,6 +13,11 @@ import java.util.List;
 /** Acceso a datos de alertas. Todas las consultas usan parámetros. */
 public final class RepositorioAlertas {
 
+    public static String condicionAntiguedadMantenimiento(String diasSql) {
+        return "DATEDIFF(CURDATE(), COALESCE(i.ultimo_mantenimiento, "
+                + "DATE(i.fecha_registro))) > " + diasSql;
+    }
+
     /** Verifica que la fuente de verdad haya sido instalada antes de usar alertas. */
     public void crearTablaSiNoExiste(Connection conexion) throws SQLException {
         String sql = "SELECT 1 FROM alertas LIMIT 0";
@@ -95,55 +100,56 @@ public final class RepositorioAlertas {
         }
     }
 
-    public void guardarGenerada(Connection conexion, String tipo, String referencia,
+    public void guardarGenerada(Connection conexion, Integer idReserva, Integer idFalla,
+            Integer idMantenimiento, Integer idInventario, String tipo, String referencia,
             String titulo, String detalle, String prioridad) throws SQLException {
-        String sql = "INSERT INTO alertas (tipo, referencia, titulo, detalle, prioridad) "
-                + "VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE titulo = VALUES(titulo), "
+        int origenes = (idReserva == null ? 0 : 1) + (idFalla == null ? 0 : 1)
+                + (idMantenimiento == null ? 0 : 1) + (idInventario == null ? 0 : 1);
+        if (origenes != 1) {
+            throw new IllegalArgumentException("Cada alerta debe tener exactamente un origen.");
+        }
+        String sql = "INSERT INTO alertas (id_reserva, id_falla, id_mantenimiento, "
+                + "id_inventario, tipo, referencia, titulo, detalle, prioridad) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "ON DUPLICATE KEY UPDATE titulo = VALUES(titulo), "
                 + "detalle = VALUES(detalle), prioridad = VALUES(prioridad)";
         try (PreparedStatement ps = conexion.prepareStatement(sql)) {
-            ps.setString(1, tipo);
-            ps.setString(2, referencia);
-            ps.setString(3, titulo);
-            ps.setString(4, detalle);
-            ps.setString(5, prioridad);
-            ps.executeUpdate();
-        }
-        String vincularOrigen = "UPDATE alertas a LEFT JOIN inventario i ON i.codigo=a.referencia "
-                + "SET a.id_reserva=CASE WHEN a.tipo IN "
-                + "('RESERVA_PENDIENTE','RESERVA_APROBADA','RESERVA_RECHAZADA') "
-                + "THEN CAST(a.referencia AS UNSIGNED) ELSE NULL END, "
-                + "a.id_falla=CASE WHEN a.tipo='FALLA_PENDIENTE' "
-                + "THEN CAST(a.referencia AS UNSIGNED) ELSE NULL END, "
-                + "a.id_mantenimiento=CASE WHEN a.tipo IN "
-                + "('MANTENIMIENTO_PROXIMO','MANTENIMIENTO_VENCIDO','SOFTWARE_ACTUALIZACION') "
-                + "THEN CAST(a.referencia AS UNSIGNED) ELSE NULL END, "
-                + "a.id_inventario=CASE WHEN a.tipo IN "
-                + "('MANTENIMIENTO_REQUERIDO','EQUIPO_BAJA','EQUIPO_REVISION') "
-                + "THEN i.id_inventario ELSE NULL END WHERE a.tipo=? AND a.referencia=?";
-        try (PreparedStatement ps = conexion.prepareStatement(vincularOrigen)) {
-            ps.setString(1, tipo);
-            ps.setString(2, referencia);
+            asignarEnteroNullable(ps, 1, idReserva);
+            asignarEnteroNullable(ps, 2, idFalla);
+            asignarEnteroNullable(ps, 3, idMantenimiento);
+            asignarEnteroNullable(ps, 4, idInventario);
+            ps.setString(5, tipo);
+            ps.setString(6, referencia);
+            ps.setString(7, titulo);
+            ps.setString(8, detalle);
+            ps.setString(9, prioridad);
             ps.executeUpdate();
         }
     }
 
+    private void asignarEnteroNullable(PreparedStatement ps, int indice, Integer valor)
+            throws SQLException {
+        if (valor == null) ps.setNull(indice, java.sql.Types.INTEGER);
+        else ps.setInt(indice, valor);
+    }
+
     public void eliminarAlertasSinOrigenActivo(Connection conexion) throws SQLException {
         String[] consultas = {
+            "DELETE FROM alertas WHERE tipo IN "
+                + "('MANTENIMIENTO_PROXIMO','MANTENIMIENTO_VENCIDO','SOFTWARE_ACTUALIZACION')",
             "DELETE a FROM alertas a WHERE a.tipo IN "
-                + "('MANTENIMIENTO_PROXIMO','MANTENIMIENTO_VENCIDO','SOFTWARE_ACTUALIZACION') "
+                + "('ACTUALIZACION_SOFTWARE','ACTUALIZACION_HARDWARE','DISPOSICION_PELIGROSA',"
+                + "'RETIRO_EQUIPO_OBSOLETO','MANTENIMIENTO_PREVENTIVO',"
+                + "'MANTENIMIENTO_CORRECTIVO','MANTENIMIENTO_GENERAL') "
                 + "AND NOT EXISTS (SELECT 1 FROM mantenimiento m "
                 + "WHERE m.id_mantenimiento=a.id_mantenimiento "
                 + "AND m.estado IN ('Pendiente','En proceso') "
-                + "AND ((a.tipo='MANTENIMIENTO_PROXIMO' AND m.fecha_programada>=CURDATE() "
-                + "AND m.fecha_programada<=DATE_ADD(CURDATE(), INTERVAL 7 DAY)) "
-                + "OR (a.tipo='MANTENIMIENTO_VENCIDO' AND m.fecha_programada<CURDATE()) "
-                + "OR (a.tipo='SOFTWARE_ACTUALIZACION' AND m.fecha_programada "
-                + "<=DATE_ADD(CURDATE(), INTERVAL 7 DAY))))",
+                + "AND m.fecha_programada<=DATE_ADD(CURDATE(), INTERVAL 7 DAY))",
             "DELETE a FROM alertas a WHERE a.tipo='MANTENIMIENTO_REQUERIDO' "
                 + "AND NOT EXISTS (SELECT 1 FROM inventario i WHERE i.id_inventario=a.id_inventario "
                 + "AND i.estado NOT IN ('Baja','En mantenimiento') "
-                + "AND (i.ultimo_mantenimiento IS NULL OR i.ultimo_mantenimiento "
-                + "< DATE_SUB(CURDATE(), INTERVAL 180 DAY)) AND NOT EXISTS (SELECT 1 "
+                + "AND " + condicionAntiguedadMantenimiento("180")
+                + " AND NOT EXISTS (SELECT 1 "
                 + "FROM mantenimiento m WHERE m.id_inventario=i.id_inventario "
                 + "AND m.estado IN ('Pendiente','En proceso')))",
             "DELETE a FROM alertas a WHERE a.tipo='FALLA_PENDIENTE' "

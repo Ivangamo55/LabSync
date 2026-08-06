@@ -9,6 +9,7 @@ import labsync.interfaz.mantenimiento.VentanaGestionMantenimiento;
 import labsync.interfaz.fallas.VentanaGestionReportesFallas;
 import labsync.interfaz.reservas.VentanaGestionReservas;
 import labsync.interfaz.panel.VentanaPanelLaboratorista;
+import labsync.modelo.SesionUsuario;
 
 import java.awt.Color;
 import java.sql.Connection;
@@ -41,17 +42,23 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaBitacoraGeneral.class.getName());
     private String nombreUsuario;
+    private SesionUsuario sesion;
     private final String PH_BUSCAR = "Usuario, laboratorio, actividad o fecha";
     private final Color COLOR_PLACEHOLDER = new Color(150, 150, 150);
     private final Color COLOR_TEXTO = new Color(51, 51, 51);
+    private volatile FiltrosBitacora filtrosAplicados = FiltrosBitacora.porDefecto();
 
     public VentanaBitacoraGeneral(String nombreRecibido) {
         initComponents();
-        setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
-        
         this.nombreUsuario = nombreRecibido;
+        normalizarShellBitacora();
+        setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
+        this.sesion = SesionUsuario.buscarLaboratorista(nombreRecibido);
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         
+        configurarPresentacionTablaBitacora();
         ponerPlaceholderBuscar();
         cargarTablaBitacora();
         iniciarActualizacionAutomatica();
@@ -60,23 +67,40 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
     public VentanaBitacoraGeneral() {
         initComponents();
         this.nombreUsuario = "Usuario";
+        normalizarShellBitacora();
+        this.sesion = new SesionUsuario(0, "Usuario", "Usuario", "Laboratorista");
         labsync.interfaz.comun.NotificacionesGlobales.laboratorista(this, header, nombreUsuario);
+        labsync.interfaz.comun.NavegacionLaboratorista.agregarAccesoHorarios(
+                this, sidebar, () -> sesion);
         setIconImage(new javax.swing.ImageIcon(getClass().getResource("/images/logo_labsync_no_background.png")).getImage());
         
-        panelContenedor.setSize(960, 60);
-        panelContenedor.setPreferredSize(new java.awt.Dimension(960, 60));
-        
+        configurarPresentacionTablaBitacora();
         ponerPlaceholderBuscar();
         cargarTablaBitacora();
         iniciarActualizacionAutomatica();
     }
 
+    public VentanaBitacoraGeneral(SesionUsuario sesionRecibida) {
+        this(sesionRecibida == null ? "Usuario" : sesionRecibida.getNombre());
+        if (sesionRecibida != null) this.sesion = sesionRecibida;
+    }
+
     private void iniciarActualizacionAutomatica() {
-        new ActualizacionAutomatica<>(this, 7_000, () -> ConsultaTabla.ejecutar(
-                "SELECT id_bitacora, DATE_FORMAT(fecha, '%d/%m/%Y') fecha, nombre_usuario, rol_usuario, laboratorio, actividad_materia, IFNULL(estado, 'Registrado') estado FROM bitacora ORDER BY fecha_registro DESC",
-                new String[]{"ID", "Fecha", "Usuario", "Rol", "Laboratorio", "Actividad / Materia", "Estado"},
-                new String[]{"id_bitacora", "fecha", "nombre_usuario", "rol_usuario", "laboratorio", "actividad_materia", "estado"}),
-                modelo -> { tablaBitacora.setModel(modelo); ocultarColumnaID(); });
+        new ActualizacionAutomatica<>(this, 7_000,
+                () -> {
+                    FiltrosBitacora filtros = filtrosAplicados;
+                    return new ResultadoBitacora(filtros, consultarBitacora(filtros));
+                },
+                resultado -> {
+                    if (resultado.filtros().equals(filtrosAplicados)) {
+                        aplicarModeloBitacora(resultado.modelo());
+                    }
+                });
+    }
+
+    private void aplicarModeloBitacora(DefaultTableModel modelo) {
+        labsync.interfaz.comun.ActualizadorModeloTabla.aplicar(
+                tablaBitacora, modelo, 0, this::configurarPresentacionTablaBitacora);
     }
     
     private void ponerPlaceholderBuscar() {
@@ -118,74 +142,39 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
             tablaBitacora.getColumnModel().getColumn(0).setWidth(0);
         }
     }
+
+    /** Separa el header del body generado y los integra en el shell común. */
+    private void normalizarShellBitacora() {
+        panelContenedor.remove(header);
+        labsync.interfaz.comun.LayoutLaboratorista.aplicar(
+                this, sidebar, header, panelContenedor);
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarSidebar(sidebar);
+        javax.swing.JPanel barraFiltros = labsync.interfaz.comun.LayoutLaboratorista.normalizarHeaderOperativo(
+                header, lbTitulo, txtBuscar,
+                new java.awt.Component[]{cmbEstado},
+                new java.awt.Component[]{lbEstado}, btnLimpiar, btnBuscar);
+        labsync.interfaz.comun.LayoutLaboratorista.restaurarHeaderIdentidad(
+                this, header, lbTitulo, nombreUsuario);
+        labsync.interfaz.comun.LayoutLaboratorista.normalizarBodyOperativo(
+                panelContenedor, jScrollPane1, barraFiltros,
+                java.util.List.of(btnVerDetalles), btnExportar);
+    }
+
+    private void configurarPresentacionTablaBitacora() {
+        labsync.interfaz.comun.EstiloTablaLaboratorista.aplicar(tablaBitacora);
+        ocultarColumnaID();
+        tablaBitacora.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
+        int[] anchos = {0, 110, 190, 100, 120, 300, 180};
+        for (int i = 1; i < anchos.length && i < tablaBitacora.getColumnCount(); i++) {
+            javax.swing.table.TableColumn columna = tablaBitacora.getColumnModel().getColumn(i);
+            columna.setPreferredWidth(anchos[i]);
+            columna.setMinWidth(i == 5 ? 140 : Math.min(anchos[i], 80));
+        }
+        jScrollPane1.getViewport().setBackground(Color.WHITE);
+    }
     
     private void cargarTablaBitacora() {
-        DefaultTableModel modelo = new DefaultTableModel();
-        Connection con = ConexionBaseDatos.conectar();
-
-        modelo.addColumn("ID");
-        modelo.addColumn("Fecha");
-        modelo.addColumn("Usuario");
-        modelo.addColumn("Rol");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Actividad / Materia");
-        modelo.addColumn("Estado");
-
-        String sql = "SELECT "
-            + "id_bitacora, "
-            + "DATE_FORMAT(fecha, '%d/%m/%Y') AS fecha, "
-            + "nombre_usuario, "
-            + "rol_usuario, "
-            + "laboratorio, "
-            + "actividad_materia, "
-            + "IFNULL(estado, 'Registrado') AS estado "
-            + "FROM bitacora "
-            + "ORDER BY fecha_registro DESC";
-
-        if (con == null) {
-            JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                JOptionPane.ERROR_MESSAGE
-            );
-            return;
-        }
-
-        try {
-            PreparedStatement ps = con.prepareStatement(sql);
-            ResultSet rs = ps.executeQuery();
-
-            while (rs.next()) {
-                Object[] fila = new Object[7];
-
-                fila[0] = rs.getInt("id_bitacora");
-                fila[1] = rs.getString("fecha");
-                fila[2] = rs.getString("nombre_usuario");
-                fila[3] = rs.getString("rol_usuario");
-                fila[4] = rs.getString("laboratorio");
-                fila[5] = rs.getString("actividad_materia");
-                fila[6] = rs.getString("estado");
-
-                modelo.addRow(fila);
-            }
-
-            tablaBitacora.setModel(modelo);
-            ocultarColumnaID();
-
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(
-                this,
-                "Error al cargar bitácora: " + e.getMessage(),
-                "Error SQL",
-                JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (SQLException ex) {
-            }
-        }
+        cargarTablaBitacoraFiltrada();
     }
     
     private void cargarDetalleBitacora(int idBitacora) {
@@ -273,24 +262,22 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
     }
     
     private void cargarTablaBitacoraFiltrada() {
-        DefaultTableModel modelo = new DefaultTableModel();
-        Connection con = ConexionBaseDatos.conectar();
-
-        modelo.addColumn("ID");
-        modelo.addColumn("Fecha");
-        modelo.addColumn("Usuario");
-        modelo.addColumn("Rol");
-        modelo.addColumn("Laboratorio");
-        modelo.addColumn("Actividad / Materia");
-        modelo.addColumn("Estado");
-
-        String textoBusqueda = txtBuscar.getText().trim();
-        String estadoSeleccionado = cmbEstado.getSelectedItem().toString();
-
-        if (textoBusqueda.equals(PH_BUSCAR)) {
-            textoBusqueda = "";
+        filtrosAplicados = capturarFiltrosBitacora();
+        try {
+            aplicarModeloBitacora(consultarBitacora(filtrosAplicados));
+        } catch (IllegalStateException ex) {
+            JOptionPane.showMessageDialog(this, "Error al filtrar bitácora: " + ex.getMessage(),
+                    "Error SQL", JOptionPane.ERROR_MESSAGE);
         }
+    }
 
+    private FiltrosBitacora capturarFiltrosBitacora() {
+        String textoBusqueda = txtBuscar.getText().trim();
+        if (textoBusqueda.equals(PH_BUSCAR)) textoBusqueda = "";
+        return new FiltrosBitacora(textoBusqueda, cmbEstado.getSelectedItem().toString());
+    }
+
+    static DefaultTableModel consultarBitacora(FiltrosBitacora filtros) {
         String sql = "SELECT "
             + "id_bitacora, "
             + "DATE_FORMAT(fecha, '%d/%m/%Y') AS fecha, "
@@ -304,7 +291,7 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
 
         java.util.ArrayList<String> parametros = new java.util.ArrayList<>();
 
-        if (!textoBusqueda.isEmpty()) {
+        if (!filtros.texto().isEmpty()) {
             sql += "AND (nombre_usuario LIKE ? "
                 + "OR rol_usuario LIKE ? "
                 + "OR laboratorio LIKE ? "
@@ -312,7 +299,7 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
                 + "OR DATE_FORMAT(fecha, '%d/%m/%Y') LIKE ? "
                 + "OR DATE_FORMAT(fecha, '%Y-%m-%d') LIKE ?) ";
 
-            String busqueda = "%" + textoBusqueda + "%";
+            String busqueda = "%" + filtros.texto() + "%";
 
             parametros.add(busqueda);
             parametros.add(busqueda);
@@ -322,63 +309,23 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
             parametros.add(busqueda);
         }
 
-        if (!estadoSeleccionado.equals("Todos")) {
+        if (!filtros.estado().equals("Todos")) {
             sql += "AND estado = ? ";
-            parametros.add(estadoSeleccionado);
+            parametros.add(filtros.estado());
         }
-
         sql += "ORDER BY fecha_registro DESC";
-
-        if (con == null) {
-            JOptionPane.showMessageDialog(
-                this,
-                "No hay conexión con la base de datos.",
-                "Error de conexión",
-                JOptionPane.ERROR_MESSAGE
-            );
-            return;
-        }
-
-        try {
-            PreparedStatement ps = con.prepareStatement(sql);
-
-            for (int i = 0; i < parametros.size(); i++) {
-                ps.setString(i + 1, parametros.get(i));
-            }
-
-            ResultSet rs = ps.executeQuery();
-
-            while (rs.next()) {
-                Object[] fila = new Object[7];
-
-                fila[0] = rs.getInt("id_bitacora");
-                fila[1] = rs.getString("fecha");
-                fila[2] = rs.getString("nombre_usuario");
-                fila[3] = rs.getString("rol_usuario");
-                fila[4] = rs.getString("laboratorio");
-                fila[5] = rs.getString("actividad_materia");
-                fila[6] = rs.getString("estado");
-
-                modelo.addRow(fila);
-            }
-
-            tablaBitacora.setModel(modelo);
-            ocultarColumnaID();
-
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(
-                this,
-                "Error al filtrar bitácora: " + e.getMessage(),
-                "Error SQL",
-                JOptionPane.ERROR_MESSAGE
-            );
-        } finally {
-            try {
-                con.close();
-            } catch (SQLException ex) {
-            }
-        }
+        return ConsultaTabla.ejecutar(sql,
+                new String[]{"ID", "Fecha", "Usuario", "Rol", "Laboratorio", "Actividad / Materia", "Estado"},
+                new String[]{"id_bitacora", "fecha", "nombre_usuario", "rol_usuario", "laboratorio", "actividad_materia", "estado"},
+                ps -> { for (int i = 0; i < parametros.size(); i++) ps.setString(i + 1, parametros.get(i)); });
     }
+
+    record FiltrosBitacora(String texto, String estado) {
+        static FiltrosBitacora porDefecto() { return new FiltrosBitacora("", "Todos"); }
+    }
+
+    private record ResultadoBitacora(FiltrosBitacora filtros,
+            DefaultTableModel modelo) { }
     
     private void limpiarDetalleBitacora() {
         txtDetalleID.setText("");
@@ -1112,46 +1059,28 @@ public class VentanaBitacoraGeneral extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void btnInicioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInicioActionPerformed
-        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(nombreUsuario);
-        
-        ventanaDashboard.setVisible(true);
-        ventanaDashboard.setLocationRelativeTo(null);
-        
-        this.dispose();
+        VentanaPanelLaboratorista ventanaDashboard = new VentanaPanelLaboratorista(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaDashboard);
     }//GEN-LAST:event_btnInicioActionPerformed
 
     private void btnInventarioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInventarioActionPerformed
-        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(nombreUsuario);
-        
-        ventanaInventario.setVisible(true);
-        ventanaInventario.setLocationRelativeTo(null);
-        
-        this.dispose();
+        VentanaGestionInventario ventanaInventario = new VentanaGestionInventario(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaInventario);
     }//GEN-LAST:event_btnInventarioActionPerformed
 
     private void btnMantActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnMantActionPerformed
-        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(nombreUsuario);
-        
-        ventanaMant.setVisible(true);
-        ventanaMant.setLocationRelativeTo(null);
-        
-        this.dispose();
+        VentanaGestionMantenimiento ventanaMant = new VentanaGestionMantenimiento(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaMant);
     }//GEN-LAST:event_btnMantActionPerformed
 
     private void btnReservasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReservasActionPerformed
-        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(nombreUsuario);
-        
-        ventanaReserva.setVisible(true);
-        ventanaReserva.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReservas ventanaReserva = new VentanaGestionReservas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReserva);
     }//GEN-LAST:event_btnReservasActionPerformed
 
     private void btnReporteFallasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReporteFallasActionPerformed
-        VentanaGestionReportesFallas ventanaReporteFalla = new VentanaGestionReportesFallas(nombreUsuario);
-        
-        ventanaReporteFalla.setVisible(true);
-        ventanaReporteFalla.setLocationRelativeTo(null);
-        this.dispose();
+        VentanaGestionReportesFallas ventanaReporteFalla = new VentanaGestionReportesFallas(sesion);
+        labsync.interfaz.comun.NavegacionLaboratorista.abrir(this, ventanaReporteFalla);
     }//GEN-LAST:event_btnReporteFallasActionPerformed
 
     private void btnLimpiarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnLimpiarActionPerformed

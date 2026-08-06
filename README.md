@@ -3,7 +3,7 @@
 > [Documentación visual de arquitectura y flujos](docs/ARQUITECTURA_Y_FLUJOS.md)
 
 Aplicación de escritorio Java Swing para administrar laboratorios, reservas,
-bitácoras, inventario y reportes de fallas. El repositorio se puede compilar
+bitácoras, inventario, software instalado y reportes de fallas. El repositorio se puede compilar
 desde esta carpeta raíz; no es necesario instalar Maven globalmente.
 
 ## Requisitos
@@ -35,35 +35,40 @@ El JAR ejecutable queda en `LabSync/target/LabSync-1.0.jar`.
 
 `clean verify` ejecuta las pruebas unitarias con JUnit 5 y genera el reporte de
 cobertura de JaCoCo en
-`LabSync/target/site/jacoco/index.html`. El reporte actual contiene 41 pruebas:
+`LabSync/target/site/jacoco/index.html`. El reporte actual contiene 102 pruebas:
 ninguna falla, ningún error y ninguna prueba omitida.
 
-La cobertura actual está concentrada en la lógica que administra
-disponibilidad, horarios, mantenimiento y alertas:
-
-| Paquete | Instrucciones | Ramas |
-| --- | ---: | ---: |
-| `labsync.servicio` | 65 % | 45 % |
-| `labsync.persistencia` | 31 % | 21 % |
-| Proyecto completo | 2 % | 6 % |
-
-El porcentaje global es bajo porque la mayoría de las ventanas Swing aún no
+La cobertura está concentrada en la lógica que administra disponibilidad,
+horarios, mantenimiento y alertas. El porcentaje global es bajo porque la
+mayoría de las ventanas Swing aún no
 tiene pruebas automatizadas. Por ello, el reporte no debe interpretarse como
 una validación completa de la interfaz ni de todos los flujos de la aplicación.
 
-## Base de datos
+## Base de datos e instalación
 
-1. Iniciar MySQL o MariaDB en `localhost:3306`.
-2. Importar `LabSync/src/main/resources/DB/labsync_db.sql`.
-   Este archivo es la única fuente de verdad y crea el esquema completo para
-   una instalación nueva.
-3. La conexión se centraliza en `ConexionBaseDatos` y admite las variables
-   `LABSYNC_DB_URL`, `LABSYNC_DB_USER` y `LABSYNC_DB_PASSWORD`. Los valores
-   locales predeterminados conservan la instalación de desarrollo existente.
+1. Iniciar MariaDB/XAMPP.
+2. Importar [`labsync_db/labsync_db.sql`](labsync_db/labsync_db.sql).
+3. Configurar la conexión si es necesario mediante `LABSYNC_DB_URL`,
+   `LABSYNC_DB_USER` y `LABSYNC_DB_PASSWORD`.
+4. Iniciar LabSync.
+5. Ingresar con la cuenta ficticia de
+   [`docs/CREDENCIALES_PRUEBA.md`](docs/CREDENCIALES_PRUEBA.md).
 
-El script completo recrea tablas y carga datos iniciales. No debe reimportarse
-sobre una base existente cuando se necesite conservar sus datos; antes de
-cualquier cambio manual se recomienda crear un respaldo.
+El archivo indicado es el único SQL del repositorio y la única fuente de verdad:
+crea de forma determinista 14 tablas, 130 columnas, restricciones, índices,
+disparadores y datos mínimos de demostración. Como recrea las tablas, se debe
+respaldar cualquier instalación existente antes de importarlo. No elimina la
+base de datos completa.
+
+La pestaña `Software por laboratorio` del inventario controla nombre, versión
+instalada, versión objetivo, uso académico y fecha de revisión. Sus estados
+identifican software actualizado, desactualizado, con instalación o eliminación
+pendiente y eliminado; `Eliminado` conserva la fila como historial.
+
+El modelo académico se limita a `ciclos_escolares`, `horarios_clase` y los
+datos descriptivos del perfil `estudiante`. Carrera, cuatrimestre, grupo,
+turno y materia se almacenan directamente donde LabSync los necesita; no se
+administra un plan de estudios.
 
 La autenticación actual conserva hashes SHA-256 hexadecimales por
 compatibilidad. Antes de producción debe migrarse a Argon2id o bcrypt con sal
@@ -82,6 +87,20 @@ individual y actualización gradual de hashes.
   laboratorio bloquean nuevas reservas incompatibles.
 - La disponibilidad se vuelve a validar dentro de la transacción y también se
   protege mediante restricciones y disparadores de la base de datos.
+
+## Mantenimiento técnico y disposición
+
+LabSync programa y alerta mantenimientos preventivos, correctivos,
+actualizaciones de software y hardware, disposición de material peligroso y
+retiro de equipos obsoletos. Los dos últimos requieren observaciones y, al
+finalizar, conservan la fila histórica del inventario con estado `Baja`; los
+demás dejan el equipo `Disponible` y actualizan la fecha del último
+mantenimiento.
+
+El inventario admite material peligroso, baterías, baterías de UPS, tóner y
+residuos electrónicos. Cantidad, ubicación, condición e indicaciones
+administrativas se registran en observaciones. LabSync únicamente registra,
+programa y avisa; no prescribe procedimientos físicos o químicos de manejo.
 
 ## Ejecutar la interfaz
 

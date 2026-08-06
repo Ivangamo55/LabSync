@@ -270,12 +270,10 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
         actualizandoSelector = true;
         cmbReservas.removeAllItems();
         cmbReservas.addItem("Selecciona una clase o reserva extraordinaria");
-        String clases = "SELECT h.id_horario, c.nombre ciclo, t.nombre carrera, g.cuatrimestre, g.letra, "
-                + "g.turno, m.nombre actividad, l.nombre laboratorio, h.hora_inicio, h.hora_fin "
+        String clases = "SELECT h.id_horario, c.nombre ciclo, h.carrera, h.cuatrimestre, h.grupo, "
+                + "h.turno, h.materia actividad, l.nombre laboratorio, h.hora_inicio, h.hora_fin "
                 + "FROM horarios_clase h JOIN ciclos_escolares c ON c.id_ciclo=h.id_ciclo "
-                + "JOIN grupos g ON g.id_grupo=h.id_grupo JOIN trayectorias t ON t.id_trayectoria=g.id_trayectoria "
-                + "JOIN plan_materias pm ON pm.id_plan_materia=h.id_plan_materia "
-                + "JOIN materias m ON m.id_materia=pm.id_materia JOIN laboratorios l ON l.id_laboratorio=h.id_laboratorio "
+                + "JOIN laboratorios l ON l.id_laboratorio=h.id_laboratorio "
                 + "WHERE h.id_profesor=? AND h.activo=1 AND c.activo=1 AND CURRENT_DATE BETWEEN c.fecha_inicio AND c.fecha_fin "
                 + "AND h.dia_semana=ELT(WEEKDAY(CURRENT_DATE)+1,'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo') "
                 + "ORDER BY h.hora_inicio";
@@ -293,7 +291,7 @@ public class VentanaBitacoraProfesor extends javax.swing.JFrame {
                         EntradaProgramada entrada=new EntradaProgramada(rs.getInt("id_horario"),null,
                                 java.sql.Date.valueOf(java.time.LocalDate.now()),horario,rs.getString("laboratorio"),
                                 rs.getString("actividad"),rs.getString("carrera"),rs.getInt("cuatrimestre")+"°",
-                                rs.getString("letra"),rs.getString("turno"),null);
+                                rs.getString("grupo"),rs.getString("turno"),null);
                         entradasProgramadas.add(entrada); cmbReservas.addItem("Clase | "+entrada.descripcion());
                     }
                 }
